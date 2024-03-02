@@ -46,52 +46,58 @@
     }
 
     // Handle click-drag-release to create edges
-    svg.on("mousedown", function() {
-      const [x1, y1] = d3.mouse(this);
+    // Handle click-drag-release to create edges
+svg.on("mousedown", function() {
+  const [x1, y1] = d3.mouse(this);
 
-      // Create a line (representing an edge) starting from the clicked position
-      const edgeLine = svg.append("line")
-        .attr("x1", x1)
-        .attr("y1", y1)
-        .attr("x2", x1)
-        .attr("y2", y1)
-        .style("stroke", "red")
-        .style("stroke-width", 2);
+  // Find the nearest node to the starting position
+  const startNode = findNearestNode(x1, y1);
 
-      // Function to handle dragging and releasing to complete the edge
-      function dragEdge() {
-        const [x2, y2] = d3.mouse(this);
+  if (startNode) {
+    // Create a line (representing an edge) starting from the clicked position
+    const edgeLine = svg.append("line")
+      .attr("x1", startNode.x)
+      .attr("y1", startNode.y)
+      .attr("x2", x1)
+      .attr("y2", y1)
+      .style("stroke", "red")
+      .style("stroke-width", 2);
 
-        // Update the line's end position during the drag
-        edgeLine.attr("x2", x2).attr("y2", y2);
+    // Function to handle dragging and releasing to complete the edge
+    function dragEdge() {
+      const [x2, y2] = d3.mouse(this);
+
+      // Update the line's end position during the drag
+      edgeLine.attr("x2", x2).attr("y2", y2);
+    }
+
+    // Function to handle releasing the mouse button to create the edge
+    function releaseEdge() {
+      const [x2, y2] = d3.mouse(this);
+
+      // Find the nearest node to the ending position
+      const endNode = findNearestNode(x2, y2);
+
+      // Create an edge between the nearest nodes
+      if (endNode) {
+        edges.push({ source: startNode.id, target: endNode.id });
+        updateEdges();
       }
 
-      // Function to handle releasing the mouse button to create the edge
-      function releaseEdge() {
-        const [x2, y2] = d3.mouse(this);
+      // Remove the temporary line
+      edgeLine.remove();
 
-        // Find the nearest nodes to the starting and ending positions
-        const startNode = findNearestNode(x1, y1);
-        const endNode = findNearestNode(x2, y2);
+      // Remove the drag and release event listeners
+      svg.on("mousemove", null);
+      svg.on("mouseup", null);
+    }
 
-        // Create an edge between the nearest nodes
-        if (startNode && endNode) {
-          edges.push({ source: startNode.id, target: endNode.id });
-          updateEdges();
-        }
+    // Attach drag and release event listeners
+    svg.on("mousemove", dragEdge);
+    svg.on("mouseup", releaseEdge);
+  }
+});
 
-        // Remove the temporary line
-        edgeLine.remove();
-
-        // Remove the drag and release event listeners
-        svg.on("mousemove", null);
-        svg.on("mouseup", null);
-      }
-
-      // Attach drag and release event listeners
-      svg.on("mousemove", dragEdge);
-      svg.on("mouseup", releaseEdge);
-    });
 
     // Function to find the nearest node to a given position
     function findNearestNode(x, y) {
