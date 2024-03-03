@@ -1,5 +1,7 @@
 import tkinter as tk
 from pyvis.network import Network
+import webbrowser
+import os
 
 class GraphGUI:
     def __init__(self):
@@ -7,41 +9,61 @@ class GraphGUI:
         self.root.title("Graph GUI")
 
         # Create an empty graph
-        self.graph = Network(height="500px", width="100%")
+        self.graph = Network(height="500px", width="100%", notebook=True, cdn_resources='in_line')
 
-        # Create a canvas for pyvis to embed in Tkinter
+        # Create a Tkinter canvas for pyvis
         self.canvas = tk.Canvas(self.root, width=800, height=600)
         self.canvas.pack()
 
         # Initialize variables to store nodes and edges
-        self.nodes = set()
-        self.edges = set()
+        self.nodes = []
+        self.edges = []
+        self.draw = [[None, None]]
+
+        self.last_clicked_node = None
+        self.current_edge = None  # Variable to track the current edge being drawn
 
         # Bind mouse events to functions
-        self.canvas.bind("<Button-1>", self.add_node)
-        self.canvas.bind("<B1-Motion>", self.add_edge)
+        self.canvas.bind("<Double-Button-1>", self.dbl_clk)
+
+    def proximal(self, event):
+        x = event.x
+        y = event.y
+        r = 60
+
+        for node_id, node_x, node_y in self.nodes:
+            distance = ((x - node_x) ** 2 + (y - node_y) ** 2) ** 0.5
+            if distance <= r:
+                return node_id, node_x, node_y  # Double click within radius of an existing node
+
+        return False  # Double click not within radius of any existing node
 
     def add_node(self, event):
         # Add a node at the clicked position
-        node_id = f"Node_{len(self.nodes) + 1}"
-        self.nodes.add(node_id)
-        self.graph.add_node(node_id)
-        self.graph.show("graph_visualization.html")
-
-    def add_edge(self, event):
-        # Add an edge by click-dragging
         x, y = event.x, event.y
-        element = self.canvas.find_closest(x, y)
+        num_node = len(self.nodes)
+        node_id = num_node + 1
+        self.nodes.append((node_id, x, y))
 
-        if element:
-            # Find the closest node to the click position
-            node_id = self.graph.get_node_at(event.x, event.y)
-            if node_id:
-                # Add an edge from the last clicked node to the current node
-                edge_id = f"Edge_{len(self.edges) + 1}"
-                self.edges.add((node_id, edge_id))
-                self.graph.add_edge(node_id, edge_id)
-                self.graph.show("graph_visualization.html")
+        self.graph.add_node(node_id, x=x, y=y)  # Add the node to the graph at the clicked position
+
+        # Draw a circle representing the node on the Tkinter canvas
+        radius = 15
+        pict = self.canvas.create_oval(x - radius, y - radius, x + radius, y + radius, fill="blue",tag=str(node_id))
+        text = self.canvas.create_text(x, y, text=node_id,tag=str(node_id))
+        self.draw.append([pict, text])
+        # Save the last clicked node for adding edges
+        self.last_clicked_node = node_id
+
+            return self
+
+    def dbl_clk(self, event):
+        p = self.proximal(event)
+        if p == False:
+            self.add_node(event)
+        else:
+            self.remove_node(event, p)
+        return self
 
     def run(self):
         self.root.mainloop()
@@ -51,4 +73,3 @@ graph_gui = GraphGUI()
 
 # Run the Tkinter application
 graph_gui.run()
-how do i run this if its saved in a GitHub repo opened in vscode
