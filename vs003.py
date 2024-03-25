@@ -2,6 +2,46 @@ import tkinter as tk
 import pyautogui
 from tkinter import ttk
 import os
+from collections import deque
+import copy
+from tkinter import scrolledtext
+
+import matplotlib.colors as mcolors
+
+class Forest:
+    def __init__(self, vertices):
+        self.parent = {v: v for v in vertices}  # parent dictionary to represent trees
+        self.rank = {v: 0 for v in vertices}   # rank dictionary for union-by-rank
+
+    def find(self, u):
+        if self.parent[u] != u:
+            self.parent[u] = self.find(self.parent[u])  # path compression
+        return self.parent[u]
+
+    def union(self, u, v):
+        root_u = self.find(u)
+        root_v = self.find(v)
+        
+        if root_u != root_v:
+            if self.rank[root_u] > self.rank[root_v]:
+                self.parent[root_v] = root_u
+            elif self.rank[root_u] < self.rank[root_v]:
+                self.parent[root_u] = root_v
+            else:
+                self.parent[root_v] = root_u
+                self.rank[root_u] += 1
+
+    def in_same_tree(self, u, v):
+        return self.find(u) == self.find(v)
+
+    def add_edge(self, u, v):
+        if not self.in_same_tree(u, v):
+            self.union(u, v)
+
+    def get_parent(self, u):
+        return self.parent[u]
+    
+
 class Node:
     def __init__(self, obj_id, node_id, x, y):
         self.obj_id = obj_id
@@ -15,6 +55,7 @@ class Edge:
         self.obj_id = obj_id
         self.start_node = start_node
         self.end_node = end_node
+
 
 class Graph:
     def __init__(self):
@@ -34,9 +75,43 @@ class Graph:
             if node.node_id == node_id:
                 return node
         return None
+    def unsatNodes(self,flag):#flag=0 find unsat, =1 remove unsat and highlight
+        unsatNodesList=[]
+        if flag==0:
+            for node in self.graph.nodes:
+                for matching in self.graph.matchings:
+                #print(node.node_id,matching.start_node.node_id,matching.end_node.node_id)
+                    if node.node_id!=matching.start_node.node_id and node.node_id!=matching.end_node.node_id:
+                        unsatNodesList.append(node)
+            x_offset = 50
+            y_offset = 50
+            for i, node in enumerate(unsatNodesList):
+                # Calculate coordinates for placing the node in Screen 2
+                x = self.screen2.start_x + x_offset
+                y = self.screen2.start_y + y_offset + (i * 50)
+                # Draw the node
+                self.canvas.create_oval(x - 20, y - 20, x + 20, y + 20, fill="blue")
+                self.canvas.create_text(x, y, text=str(node.node_id))
+                for nodes in self.graph.nodes:
+                    if node.node_id==nodes.node_id:
+                        x = nodes.x
+                        y = nodes.y
+                        rgba_blue = (0, 0, 255, 0.5)
+
+
+                        hex_color_code = "#{:02x}{:02x}{:02x}".format(int(rgba_blue[0]), int(rgba_blue[1]), int(rgba_blue[2]))
+
+                        self.canvas.tag_lower(self.canvas.create_oval(x - 25, y -25, x + 25, y + 25, fill="blue",stipple='gray25'))
+                    
+
+        
+        elif flag==1:
+            print("HI")
+
+        return self
      
-    def uploadGraph(file):
-        graph= Graph()
+    def uploadGraph(self,file):
+        self.graph= Graph()
         current_section = None
         obj_id = 0
         with open(file, 'r') as file:
@@ -53,7 +128,7 @@ class Graph:
                         parts = line.split(",")
                         obj_id, node_id, x, y = map(int, parts)
                         node = Node(obj_id, node_id, x, y)
-                        graph.nodes.append(node)
+                        self.graph.nodes.append(node)
                     elif current_section == "Edges":
                         parts = line.strip("()").split("),(")
                         count=0
@@ -61,29 +136,63 @@ class Graph:
                             
                             obj_id, node_id = map(int, part.split(","))
                             
-                            for node in graph.nodes:
+                            for node in self.graph.nodes:
                                 if node_id==node.node_id and count==0:
                                     start_node=node
+                                    print(start_node.node_id)
                                     count+=1
                                 if node_id==node.node_id and count==1:
                                     end_node=node
+                                    print(end_node.node_id)
+                                
                         edge = Edge(obj_id, start_node, end_node)
-                        graph.edges.append(edge)
+                        print("obj_id222",edge.obj_id)
+                        self.graph.edges.append(edge)
                     elif current_section == "Matchings":
                         count=0
+                        parts=line.split("\n")
+                        matching=Edge
                         for part in parts:
-                            obj_id =part
-                            for edge in graph.edges:
-                                if obj_id==edge.obj_id and count==0:
-                                    start_node=edge.start_node
-                                    count+=1
-                                if obj_id==edge.obj_id and count==1:
-                                    end_node=edge.end_node
+                            for edge in self.graph.edges:
+                                if int(part)==edge.obj_id:
+                                    print("Part,edge_ids",part,edge.obj_id)
+                                    matching.obj_id=int(part)
+                                    matching.start_node=edge.start_node
+                                    matching.end_node=edge.end_node
+                            
+                        
+
+                        
+                        self.graph.matchings.append(matching)
+        for node in self.graph.nodes:
+            print("AAA|",node.node_id)
+        
+            
+        return self.graph
+    
+    def proximal(self,event):
+        r = 30
+
+        #if isinstance(object,Node)==True:
+            #print("NODE")
+
+        for node in self.nodes:
+            distance = ((event.x - node.x) ** 2 + (event.y - node.y) ** 2) ** 0.5
+            if distance <= r:
+                #print("Node clicked",node.node_id)
+                return node  # Click within the radius of an existing node
+        for edge in self.edges:
+            start_x, start_y = edge.start_node.x, edge.start_node.y
+            end_x, end_y = edge.end_node.x, edge.end_node.y
+            distance_to_edge = abs((end_y - start_y) * event.x - (end_x - start_x) * event.y + end_x * start_y - end_y * start_x) / ((end_y - start_y) ** 2 + (end_x - start_x) ** 2) ** 0.5
+
+            if distance_to_edge <= 10:
+                print("Edge clicked:", edge.start_node.node_id,edge.end_node.node_id,edge.start_node.x,edge.start_node.y,edge.end_node.x,edge.end_node.y)
+                return edge  # Click within the radius of an existing edge
+    # Click within the radius of an existing edges centre
+        return False  # Click not within radius of any existing node
 
 
-                        matching = Edge(obj_id, start_node, end_node)
-                        graph.matchings.append(matching)
-        return graph
     
     
 
@@ -102,49 +211,10 @@ class Screen:
         return self
 
 
-def proximal(self, event):
-        r = 30
-
-        #if isinstance(object,Node)==True:
-            #print("NODE")
-
-        for node in self.graph.nodes:
-            distance = ((event.x - node.x) ** 2 + (event.y - node.y) ** 2) ** 0.5
-            if distance <= r:
-                #print("Node clicked",node.node_id)
-                return node  # Click within the radius of an existing node
-        for edge in self.graph.edges:
-            start_x, start_y = edge.start_node.x, edge.start_node.y
-            end_x, end_y = edge.end_node.x, edge.end_node.y
-            distance_to_edge = abs((end_y - start_y) * event.x - (end_x - start_x) * event.y + end_x * start_y - end_y * start_x) / ((end_y - start_y) ** 2 + (end_x - start_x) ** 2) ** 0.5
-
-            if distance_to_edge <= 10:
-                print("Edge clicked:", edge.start_node.node_id,edge.end_node.node_id,edge.start_node.x,edge.start_node.y,edge.end_node.x,edge.end_node.y)
-                return edge  # Click within the radius of an existing edge
-  # Click within the radius of an existing edges centre
-        return False  # Click not within radius of any existing node
 
 
 
 
-
-class Edmonds:  
-    def __init__(self):
-        self.maximum_matching = self.edmonds(self.graph)
-    
-    @staticmethod
-    def unsatNode(graph):
-        for node in graph.nodes:
-            for edge in graph.matchings:
-                if (node!=edge.start_node and node!=edge.end_node):
-                    print(node.node_id,"unsatuared")
-                
-            
-
-
-
-    
-   
 class Gui:
     def __init__(self,graph=Graph()):
         self.root = tk.Tk()
@@ -174,8 +244,31 @@ class Gui:
         screens=[self.screen1,self.screen2,self.screen3,self.screen4]
         Screen.showScreens(self,screens)
 
+        self.scroll_text = scrolledtext.ScrolledText(self.canvas, wrap=tk.WORD,font= ("Purisa", 20))
+        self.scroll_text.config(state="disabled")
+        self.scroll_text.place(x=self.screen3.start_x ,y=self.screen3.start_y,anchor="nw",width=self.screen3.end_x - self.screen3.start_x, height=self.screen3.end_y - self.screen3.start_y)
         
+
+            # Add some text to the Text Box
+        self.pseudoCode=["FIND UNSAT NODES","UNSAT NODES FORM ROOTS OF TREES"]
+        for line_num in range(0,len(self.pseudoCode)*10):
+            self.scroll_text.insert("end", f"Line {line_num+1 },{self.pseudoCode[line_num%2]}\n")
+        self.scroll_text.tag_configure("highlight", background="yellow")
+        self.graph=None
+
+        if isinstance(graph,Graph):
+            self.graph=graph
+        else:
             
+            self.graph=Graph.uploadGraph(self,graph)
+            
+            for edges in self.graph.edges:
+                print("||",edges)
+            self.obj_id = self.graph.edges[-1].obj_id+1
+            self.node_id_num=self.graph.nodes[-1].node_id+1
+            print(self.obj_id,self.node_id_num)
+        
+        
 
         self.input_entry = tk.Entry(self.canvas)
         self.input_entry.place(x=self.screen4.start_x+60,y=self.screen4.start_y+140,anchor="w")
@@ -184,27 +277,69 @@ class Gui:
         self.execute = tk.Button(self.canvas, text="Execute", command=self.execute) 
         self.execute.place(x=self.screen4.start_x +200,y=self.screen4.start_y+60,anchor="c")
 
+
+            
+
         self.last_clicked_node = None
         self.current_edge = None  # Variable to track the current edge being drawn
+
+
         self.canvas.bind("<Double-Button-1>", self.dbl_clk)
-        #self.canvas.bind("<Double-Button-1>", self.dbl_clk)
-        
         self.canvas.bind("<Button-2>", self.dbl_clk)
         self.canvas.bind("<Button-1>", self.b1_sngl_clk)
         self.canvas.bind("<Button-1>", self.b1_sngl_clk)
         self.canvas.bind("<B1-Motion>", self.draw_edge)
         self.canvas.bind("<ButtonRelease-1>", self.end_edge)
-        if isinstance(graph,Graph):
-            self.graph=graph
-        else:
-            print("AAAAAA",graph)
-            self.graph=Graph.uploadGraph(graph)
-            
-            self.obj_id = self.graph.edges[-1].obj_id+1
-            self.node_id_num=self.graph.nodes[-1].node_id+1
-            print(self.obj_id,self.node_id_num)
+        
+    def highlight_line(self,i):
+        
+        self.scroll_text.config(state="normal")  # Set state to normal to allow modifications
+        self.scroll_text.delete(1.0, "end")  # Clear existing text
+
+        for line_num in range(0, len(self.pseudoCode)):
+            line_text = f"Line {line_num + 1}, {self.pseudoCode[line_num]}\n"
+            self.scroll_text.insert("end", line_text)
+            if i == line_num:
+                # Apply the highlight tag to the current line
+                self.scroll_text.tag_add("highlight", f"{line_num + 1}.0", f"{line_num + 1}.end")
+                self.scroll_text.tag_configure("highlight", background="yellow")
+
+        self.scroll_text.config(state="disabled")  # Set state back to disabled
 
 
+
+    def execute(self):
+        # Initialize the Edmonds instance and execute the algorithm
+        self.canvas.unbind("<Double-Button-1>")
+        self.canvas.unbind("<Button-2>")
+        self.canvas.unbind("<Button-1>")
+        self.canvas.unbind("<Button-1>")
+        self.canvas.unbind("<B1-Motion>")
+        self.canvas.unbind("<ButtonRelease-1>")
+        self.canvas.bind("<BackSpace>", print("Backspace"))
+        for  i in range(0,len(self.graph.nodes)):
+            print("Nodes",self.graph.nodes[i].node_id)
+        for  i in range(0,len(self.graph.edges)):
+            print("edges",self.graph.edges[i].start_node.node_id,self.graph.edges[i].end_node.node_id)
+        for  i in range(0,len(self.graph.matchings)):
+            print("matchings",self.graph.matchings[i].start_node.node_id,self.graph.matchings[i].end_node.node_id)
+        self=Graph.unsatNodes(self,0)
+
+        # Highlight line 1 in the scrolled text
+        self.highlight_line(0)
+
+        # Clear any existing tree nodes in Screen 2
+        #self.clear_screen(self.screen2)
+
+        # Add unsaturated nodes to a separate tree in Screen 2
+        
+        return self
+        
+       
+ 
+
+
+    
 
     def append_matching(self,edge):
         for match in self.graph.matchings:
@@ -218,6 +353,10 @@ class Gui:
         self.displayGraph()
         return self
     
+   
+
+    
+
     def remove_matching(self,edge):
         for edges in self.graph.matchings:
             if edges.start_node.node_id==edge.start_node.node_id and edges.end_node.node_id==edge.end_node.node_id:
@@ -225,8 +364,9 @@ class Gui:
                 self.graph.matchings.remove(edge)
                 self.displayGraph()
         return self    
+    
     def b1_sngl_clk(self,event):
-        p=proximal(self,event)
+        p=self.graph.proximal(event)
         if isinstance(p,Node):
             self.start_edge(event)
             
@@ -246,26 +386,14 @@ class Gui:
     
     
         
-    
-            
-        
     def dbl_clk(self,event):
         if event.x<600 and event.y<500:
             self.addDelNode(event)
-            
+
         else:
             print("cant add node outside of canvas1")
 
-    def execute(self):
-        for  i in range(0,len(self.graph.nodes)):
-            print("Nodes",self.graph.nodes[i].node_id)
-        for  i in range(0,len(self.graph.edges)):
-            print("edges",self.graph.edges[i].start_node.node_id,self.graph.edges[i].end_node.node_id)
-        for  i in range(0,len(self.graph.matchings)):
-            print("matchings",self.graph.matchings[i].start_node.node_id,self.graph.matchings[i].end_node.node_id)
-       
-        self.maxGraph=Edmonds.unsatNode(self.graph)
-        return self
+
 
     def getText(self):
         text=self.input_entry.get()
@@ -313,8 +441,8 @@ class Gui:
         self.delete_shapes_in_region(self.canvas,self.screen1.start_x,self.screen1.start_y,self.screen1.end_x-10,self.screen1.end_y-10)
         for node in self.graph.nodes:
             r = 20
-            self.canvas.create_oval(node.x - r, node.y - r, node.x + r, node.y + r, fill="red")
-            self.canvas.create_text(node.x, node.y,font=("Purisa",20), text=str(node.node_id))
+            self.canvas.tag_raise(self.canvas.create_oval(node.x - r, node.y - r, node.x + r, node.y + r, fill="red"))
+            self.canvas.tag_raise(self.canvas.create_text(node.x, node.y,font=("Purisa",20), text=str(node.node_id)))
 
         for edge in self.graph.edges:
             start_x, start_y = edge.start_node.x, edge.start_node.y
@@ -322,6 +450,7 @@ class Gui:
             end_x, end_y = edge.end_node.x, edge.end_node.y
             self.canvas.create_line(start_x, start_y, end_x, end_y, fill="green", width=5)
         for edge in self.graph.matchings:
+            print(edge.obj_id)
             start_x, start_y = edge.start_node.x, edge.start_node.y
             
             end_x, end_y = edge.end_node.x, edge.end_node.y
@@ -360,7 +489,7 @@ class Gui:
 
 
     def addDelNode(self,event):
-        p=proximal(self,event)
+        p=self.graph.proximal(event)
         if p==False:
             self.addNode(event)
         else:
@@ -369,7 +498,7 @@ class Gui:
 
     def start_edge(self, event):
         # Start drawing a new edge from an existing node
-        p = proximal(self,event)
+        p = self.graph.proximal(event)
         if p is not False:
             self.current_edge = Edge(self.obj_id, p, p)
             self.obj_id+=1
@@ -382,7 +511,7 @@ class Gui:
 
     def end_edge(self, event):
         # End drawing the edge and add it to the list of edges
-        p = proximal(self,event)
+        p = self.graph.proximal(event)
 
         
         if self.current_edge and p is not False:
