@@ -12,7 +12,11 @@ class Forest:
     def __init__(self, vertices):
         self.parent = {v: v for v in vertices}  # parent dictionary to represent trees
         self.rank = {v: 0 for v in vertices}   # rank dictionary for union-by-rank
-
+    def draw_roots(self):
+    
+    
+        return self
+    
     def find(self, u):
         if self.parent[u] != u:
             self.parent[u] = self.find(self.parent[u])  # path compression
@@ -21,7 +25,8 @@ class Forest:
     def union(self, u, v):
         root_u = self.find(u)
         root_v = self.find(v)
-        
+        print("root U =",root_u)
+        print("root V =",root_v)
         if root_u != root_v:
             if self.rank[root_u] > self.rank[root_v]:
                 self.parent[root_v] = root_u
@@ -41,7 +46,6 @@ class Forest:
     def get_parent(self, u):
         return self.parent[u]
     
-
 class Node:
     def __init__(self, obj_id, node_id, x, y):
         self.obj_id = obj_id
@@ -70,6 +74,14 @@ class Graph:
         for matches in self.graph.matchings:
             print("matching",matches.start_node.node_id,matches.end_node.node_id)
 
+    def neighbours(self,node_id):
+        neighbours=[]
+        for edge in self.graph.edges:
+            if edge.start_node.node_id==node_id:
+                neighbours.append(edge.end_node)
+            elif edge.end_node.node_id==node_id:
+                neighbours.append(edge.start_node)
+        return neighbours
     def find_node_by_id(self, node_id):
         for node in self.graph.nodes:
             if node.node_id == node_id:
@@ -77,29 +89,17 @@ class Graph:
         return None
     def unsatNodes(self,flag):
         unsat_nodes = []  # List to store unsaturated nodes
-        unsat_ids = set()  # Set to efficiently check if a node is unsaturated
-
-        # Add all nodes to the set initially
         for node in self.graph.nodes:
-            unsat_ids.add(node.node_id)
+            for matching in self.graph.matchings:
+                if node.node_id==matching.start_node.node_id or node.node_id==matching.end_node.node_id:
+                    continue
+                else:
+                    unsat_nodes.append(node)
+        for i in range(0,len(unsat_nodes)):
+            print(unsat_nodes[i].node_id)
+        
 
-        # Iterate over matching edges to remove nodes that are part of matchings
-        for matching in self.graph.matchings:
-            unsat_ids.discard(matching.start_node.node_id)
-            unsat_ids.discard(matching.end_node.node_id)
-
-        # Now, the unsat_ids set contains only unsaturated node IDs
-
-        # Create a forest of unsaturated nodes
-        unsat_forest = Forest(unsat_ids)
-
-        # Output the forest evenly spaced
-        # For simplicity, let's just print the parent dictionary
-        print("Forest Representation:")
-        print(unsat_forest.parent)
-        unsat_forest.add_edge(0,5)
-        print(unsat_forest.parent)
-        return self
+        return unsat_nodes
      
     def uploadGraph(self,file):
         self.graph= Graph()
@@ -314,8 +314,16 @@ class Gui:
             print("edges",self.graph.edges[i].start_node.node_id,self.graph.edges[i].end_node.node_id)
         for  i in range(0,len(self.graph.matchings)):
             print("matchings",self.graph.matchings[i].start_node.node_id,self.graph.matchings[i].end_node.node_id)
-        self=Graph.unsatNodes(self,0)
-
+        unsatNodes=Graph.unsatNodes(self,0)
+        self.forest = Forest(unsatNodes)
+        
+        for node in self.graph.nodes:
+            if node.node_id==2:
+                node2=node
+            if node.node_id==4:
+                node3=node
+        
+        Forest.draw_roots(self)
         # Highlight line 1 in the scrolled text
         self.highlight_line(0)
 
@@ -448,8 +456,6 @@ class Gui:
             self.canvas.create_line(start_x, start_y, end_x, end_y, fill="red", width=5)
         
        
-
-
     
     def addNode(self,event):
         x, y = event.x, event.y
