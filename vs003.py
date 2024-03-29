@@ -75,39 +75,30 @@ class Graph:
             if node.node_id == node_id:
                 return node
         return None
-    def unsatNodes(self,flag):#flag=0 find unsat, =1 remove unsat and highlight
-        unsatNodesList=[]
-        if flag==0:
-            for node in self.graph.nodes:
-                for matching in self.graph.matchings:
-                #print(node.node_id,matching.start_node.node_id,matching.end_node.node_id)
-                    if node.node_id!=matching.start_node.node_id and node.node_id!=matching.end_node.node_id:
-                        unsatNodesList.append(node)
-            x_offset = 50
-            y_offset = 50
-            for i, node in enumerate(unsatNodesList):
-                # Calculate coordinates for placing the node in Screen 2
-                x = self.screen2.start_x + x_offset
-                y = self.screen2.start_y + y_offset + (i * 50)
-                # Draw the node
-                self.canvas.create_oval(x - 20, y - 20, x + 20, y + 20, fill="blue")
-                self.canvas.create_text(x, y, text=str(node.node_id))
-                for nodes in self.graph.nodes:
-                    if node.node_id==nodes.node_id:
-                        x = nodes.x
-                        y = nodes.y
-                        rgba_blue = (0, 0, 255, 0.5)
+    def unsatNodes(self,flag):
+        unsat_nodes = []  # List to store unsaturated nodes
+        unsat_ids = set()  # Set to efficiently check if a node is unsaturated
 
+        # Add all nodes to the set initially
+        for node in self.graph.nodes:
+            unsat_ids.add(node.node_id)
 
-                        hex_color_code = "#{:02x}{:02x}{:02x}".format(int(rgba_blue[0]), int(rgba_blue[1]), int(rgba_blue[2]))
+        # Iterate over matching edges to remove nodes that are part of matchings
+        for matching in self.graph.matchings:
+            unsat_ids.discard(matching.start_node.node_id)
+            unsat_ids.discard(matching.end_node.node_id)
 
-                        self.canvas.tag_lower(self.canvas.create_oval(x - 25, y -25, x + 25, y + 25, fill="blue",stipple='gray25'))
-                    
+        # Now, the unsat_ids set contains only unsaturated node IDs
 
-        
-        elif flag==1:
-            print("HI")
+        # Create a forest of unsaturated nodes
+        unsat_forest = Forest(unsat_ids)
 
+        # Output the forest evenly spaced
+        # For simplicity, let's just print the parent dictionary
+        print("Forest Representation:")
+        print(unsat_forest.parent)
+        unsat_forest.add_edge(0,5)
+        print(unsat_forest.parent)
         return self
      
     def uploadGraph(self,file):
@@ -316,7 +307,7 @@ class Gui:
         self.canvas.unbind("<Button-1>")
         self.canvas.unbind("<B1-Motion>")
         self.canvas.unbind("<ButtonRelease-1>")
-        self.canvas.bind("<BackSpace>", print("Backspace"))
+        #self.canvas.bind("<BackSpace>")
         for  i in range(0,len(self.graph.nodes)):
             print("Nodes",self.graph.nodes[i].node_id)
         for  i in range(0,len(self.graph.edges)):
