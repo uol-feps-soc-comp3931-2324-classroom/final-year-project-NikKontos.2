@@ -23,7 +23,8 @@ class Node:
 class Edge:
     def __init__(self,edge_id,node1,node2):
         self.edge_id=edge_id
-        self.nodes=[node1,node2]
+        self.node1=node1
+        self.node2=node2
 
 class InputGUI:
     def __init__(self):
@@ -115,7 +116,7 @@ class InputGUI:
         # Helper function to dynamically display the temporary edge
         self.canvas1.delete("temp_edge")
         if self.active_edge:
-            start_x, start_y = self.active_edge.nodes[0].x, self.active_edge.nodes[0].y
+            start_x, start_y = self.active_edge.node1.x, self.active_edge.node1.y
             end_x, end_y = event.x, event.y  # Use cursor position as end point
             self.canvas1.create_line(start_x, start_y, end_x, end_y, fill="blue", tags="temp_edge")
             self.canvas1.bind("<ButtonRelease-1>", self.end_edge)
@@ -123,7 +124,7 @@ class InputGUI:
     def draw_edge(self, event):
         # Update the end point of the current edge while dragging
         if self.active_edge:
-            self.active_edge.nodes[1] = Node(-1, event.x, event.y)
+            self.active_edge.node2 = Node(-1, event.x, event.y)
             self.display_temp_edge(event)
             
     def sngl_clk_b1(self,event):
