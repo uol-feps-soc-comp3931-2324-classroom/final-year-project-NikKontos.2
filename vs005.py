@@ -3,6 +3,7 @@ from tkinter import ttk, scrolledtext
 import os
 import math
 import time
+import copy
 
 class Node:
     def __init__(self,node_id,x,y):
@@ -44,7 +45,7 @@ class Graph:
         for edge in self.edges:
             if (edge.node1==node1 and edge.node2==node2) or (edge.node2==node1 and edge.node1==node2):
                 print("EDGE EXISTS")
-                return self
+                return 0
             else:
                 continue
         self.edges.append(Edge(edge_id, node1, node2))
@@ -56,18 +57,81 @@ class Graph:
     
     def add_matching(self,matching):
         for match in self.matchings:
+            if isinstance(match,Matching):
+                print("match")
+            elif isinstance(match,Edge):
+                print("edge")
             if match.node1==matching.node1 or match.node2==matching.node1 or match.node1==matching.node2 or match.node2==matching.node2:
+                print("INVALID MATCHING")
                 return None
         self.matchings.append(matching)
 
     def remove_matching(self,matching):
-        self.matchings.remove(matching)
-        self.add_edge(matching.edge_id,matching.node1,matching.node2)
+        if matching in self.matchings:
+            self.matchings.remove(matching)
+            self.add_edge(matching.edge_id,matching.node1,matching.node2)
         return 0
+    
+    def find_node(self,node_id):
+        for node in self.nodes:
+            if node_id==node.node_id:
+                return node
+            else:
+                print("NODENOT FOUND")
+
+    def uploadGraph(file):
+        graph = Graph()
+        current_section = None
+        max_nodeID=0
+        max_edgeID=0
+        with open(file, 'r') as file:
+            for line in file:
+                line = line.strip()
+                if line == "Nodes:":
+                    current_section = "Nodes"
+                elif line == "Edges:":
+                    current_section = "Edges"
+                elif line == "Matchings:":
+                    current_section = "Matchings"
+                elif line:  # Non-empty line
+                    if current_section == "Nodes":
+                        parts = line.split(",")
+                        node_id, x, y = map(int, parts)
+                        if max_nodeID<=node_id:
+                            max_nodeID=node_id+1
+                        graph.add_node(node_id, x, y)
+                    elif current_section == "Edges":
+                        parts = line.strip("()").split("),(")
+                        for part in parts:
+                            edge_id, node1_id, node2_id = map(int, part.split(","))
+                            node1 = next((node for node in graph.nodes if node.node_id == node1_id), None)
+                            node2 = next((node for node in graph.nodes if node.node_id == node2_id), None)
+                            
+                            if max_edgeID<=edge_id:
+                                max_edgeID=edge_id+1
+                            if node1 and node2:
+                                graph.add_edge(edge_id, node1, node2)
+                    elif current_section == "Matchings":
+                        parts = line.split(",")
+                        edge_id, node1_id, node2_id = map(int, parts)
+                        node1 = next((node for node in graph.nodes if node.node_id == node1_id), None)
+                        node2 = next((node for node in graph.nodes if node.node_id == node2_id), None)
+                        if max_edgeID<=edge_id:
+                                max_edgeID=edge_id+1
+                        if node1 and node2:
+                            graph.add_matching(Matching(edge_id, node1, node2))
+        return graph,max_nodeID,max_edgeID
+
+
+
+
+
+
 
 
 class InputGUI:
-    def __init__(self):
+    def __init__(self,file=None):
+        
         self.root = tk.Tk()
         self.root.title("INPUT Graph ")
         self.root.geometry("1000x600")
@@ -77,10 +141,9 @@ class InputGUI:
         self.canvas2 = tk.Canvas(self.root, bg="blue", height=2000, width=500)
         self.canvas2.pack(side=tk.RIGHT)
 
-        self.node_id = 0
-        self.edge_id = 0
+        
         self.active_edge = None
-        self.graph = Graph()
+        
 
         self.last_click_time = 0  # Initialize variable to store last click time
         self.click_delay = 0.01
@@ -89,17 +152,52 @@ class InputGUI:
         self.input_entry.place(x=60, y=140, anchor="w")
         self.save_button = tk.Button(self.canvas1, text="Save", command=self.save)
         self.save_button.place(x=90, y=140, anchor="e")
+        
+        self.forward_button = tk.Button(self.canvas1, text="Forward", command=self.forward)
+        self.forward_button.place(x=10, y=10)  # Adjust the position as needed
+
+        self.backward_button = tk.Button(self.canvas1, text="Backward", command=self.backward)
+        self.backward_button.place(x=100, y=10)  # Adjust the position as needed
+        
+        if file==None:
+            self.graph = Graph()
+            self.node_id = 0
+            self.edge_id = 0
+        else:
+            self.graph,self.node_id,self.edge_id = Graph.uploadGraph(file)
+            for nodes in self.graph.nodes:
+                print("Nodes:",nodes.node_id,nodes.x,nodes.y)
+            for edges in self.graph.edges:
+                print("edges:",edges.edge_id,edges.node1.node_id,edges.node2.node_id)
+            for match in self.graph.matchings:
+                print("matchings:",match.edge_id,match.node1.node_id,match.node2.node_id)
+        
+
+        self.history = []
+        self.history_index=-1
 
         self.canvas1.bind("<Double-Button-1>", self.dbl_clk_b1)
         self.canvas1.bind("<Button-1>", self.sngl_clk_b1)
     def run(self):
         self.root.mainloop()
 
-    def findCords(self, node_id):
-        for node in self.graph.nodes:
-            if node.node_id == node_id:
-                return node.x, node.y
-        return None
+    
+    def save_to_history(self):
+        # Save the current state of the graph to history
+        self.history = self.history[:self.history_index + 1]  # Truncate history after current index
+        self.history.append(copy.deepcopy(self.graph))  # Deep copy to avoid reference issues
+        self.history_index += 1
+    def backward(self):
+        if self.history_index > 0:
+            self.history_index -= 1
+            self.graph = self.history[self.history_index]
+            self.displayGraph()
+
+    def forward(self):
+        if self.history_index < len(self.history) - 1:
+            self.history_index += 1
+            self.graph = self.history[self.history_index]
+            self.displayGraph()
 
     def dbl_clk_b1(self, event):
         current_time = time.time()
@@ -107,12 +205,17 @@ class InputGUI:
             return  # Ignore subsequent clicks within the delay period
 
         p = self.proximal(event)
+        self.save_to_history()
         if p == 0:
             self.last_click_time = current_time  # Update last click time
             self.graph.add_node(self.node_id, event.x, event.y)
             self.node_id += 1
+
+            
+
         elif isinstance(p, Node):
             self.graph.remove_node(p)
+        self.save_to_history()
         self.displayGraph()
 
         self.last_click_time = current_time
@@ -120,23 +223,33 @@ class InputGUI:
 
     def sngl_clk_b1(self, event):
         p = self.proximal(event)
+        self.save_to_history()
         if isinstance(p, Node):
+            print("NODE")
             self.active_edge = Edge(self.edge_id, p, None)
             self.canvas1.bind("<B1-Motion>", self.draw_edge)
-        if isinstance(p, Edge):
-            if p in self.graph.matchings:
-                self.graph.remove_matching(p)
-            else:
-                self.graph.add_matching(p)
+        elif isinstance(p,Matching):
+            print("EDGE3")
+            self.graph.remove_matching(p)
+            self.save_to_history()
 
+        
+        elif isinstance(p, Edge):
+            print("EDGE1")
+            self.graph.add_matching(p)
+            self.save_to_history()
+
+        self.displayGraph() 
     def end_edge(self, event):
         p = self.proximal(event)
         if self.active_edge and isinstance(p, Node) and self.active_edge.node1 != p:
             self.active_edge.node2 = p
             self.graph.add_edge(self.edge_id, self.active_edge.node1, self.active_edge.node2)
             self.edge_id += 1
+            self.save_to_history()
         self.active_edge = None
         self.canvas1.unbind("<B1-Motion>")
+        
         self.displayGraph()
         return self
 
@@ -160,7 +273,7 @@ class InputGUI:
 
     def displayGraph(self):
         self.delete_shapes_in_region(self.canvas1, 0, 0, 500, 1000)
-
+        
         r = 20
         for edge in self.graph.edges:
             self.canvas1.create_line(edge.node1.x,edge.node1.y,edge.node2.x,edge.node2.y,fill="blue",width=10)
@@ -171,7 +284,7 @@ class InputGUI:
             self.canvas1.create_oval(node.x - r, node.y - r, node.x + r, node.y + r, fill="white")
             self.canvas1.tag_raise(self.canvas1.create_text(node.x, node.y, font=("Purisa", 20), text=str(node.node_id)))
 
-        return self
+        
     
 
 
@@ -206,11 +319,29 @@ class InputGUI:
             if distance <= r:
                 print("Node clicked", node.node_id)
                 return node
+
+
+        for match in self.graph.matchings:
+            x1, y1 = match.node1.x, match.node1.y
+            x2, y2 = match.node2.x, match.node2.y
+
+            # Calculate distance from the point to the line segment
+            #print(self.point_distance(x1,y1,x2,y2,event.x,event.y))
+            distance=self.point_distance(x1,y1,x2,y2,event.x,event.y)
+
+            edge_perimeter = 10  # Adjust as needed
+        
+        # If the distance is within the perimeter, return the edge
+            if distance <= edge_perimeter:
+                print("match clicked:", match.edge_id)
+                return match
+
+
         for edge in self.graph.edges:
             x1, y1 = edge.node1.x, edge.node1.y
             x2, y2 = edge.node2.x, edge.node2.y
 
-        # Calculate distance from the point to the line segment
+            # Calculate distance from the point to the line segment
             #print(self.point_distance(x1,y1,x2,y2,event.x,event.y))
             distance=self.point_distance(x1,y1,x2,y2,event.x,event.y)
 
@@ -220,6 +351,9 @@ class InputGUI:
             if distance <= edge_perimeter:
                 print("Edge clicked:", edge.edge_id)
                 return edge
+            
+
+
         return 0
 
     def getText(self):
@@ -284,7 +418,7 @@ class HomeGui:
         inputGraphGUI.run()
 
     def uploadTool(self, file):
-        uploadGraphGUI = Edmonds(file)
+        uploadGraphGUI = InputGUI(file)
         uploadGraphGUI.run()
 
     def run(self):
