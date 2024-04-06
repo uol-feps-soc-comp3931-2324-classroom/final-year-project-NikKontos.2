@@ -30,6 +30,7 @@ class Graph:
         self.nodes = []
         self.edges = []
         self.matchings = []
+      
 
     def add_node(self, node_id, x, y):
         self.nodes.append(Node(node_id, x, y))
@@ -49,36 +50,40 @@ class Graph:
             else:
                 continue
         self.edges.append(Edge(edge_id, node1, node2))
-       
-    
-    def remove_edge(self, edge):
-        if edge in self.edges:
-            self.edges.remove(edge)
-    
+        
+   
     def add_matching(self,matching):
-        for match in self.matchings:
-            if isinstance(match,Matching):
-                print("match")
-            elif isinstance(match,Edge):
-                print("edge")
-            if match.node1==matching.node1 or match.node2==matching.node1 or match.node1==matching.node2 or match.node2==matching.node2:
-                print("INVALID MATCHING")
-                return None
+        for matches in self.matchings:
+            if matching.node1==matches.node1 or matching.node1==matches.node2 or matching.node2==matches.node1 or matching.node2==matches.node2:
+                print("invalid matching")
+                return 0
+            
+        
         self.matchings.append(matching)
+        for match in self.matchings:
+            print("ADDED matchings",match.edge_id,match.node1.node_id,match.node2.node_id)
 
-    def remove_matching(self,matching):
-        if matching in self.matchings:
-            self.matchings.remove(matching)
-            self.add_edge(matching.edge_id,matching.node1,matching.node2)
-        return 0
+    def remove_matching(self, matching):
+        print("REMOVE MATCH",matching.edge_id,matching.node1.node_id,matching.node2.node_id)
+        self.matchings=[match for match in self.matchings if matching!=match]
+        
+        self.add_edge(matching.edge_id,matching.node1,matching.node2)
+        for match in self.matchings:
+            print("removed matchings",match.edge_id,match.node1.node_id,match.node2.node_id)
+        for edge in self.edges:
+            print("ADDED edges",edge.edge_id,edge.node1.node_id,edge.node2.node_id)
+
+        return self
     
+
     def find_node(self,node_id):
         for node in self.nodes:
             if node_id==node.node_id:
                 return node
             else:
                 print("NODENOT FOUND")
-
+    
+    @staticmethod
     def uploadGraph(file):
         graph = Graph()
         current_section = None
@@ -122,7 +127,31 @@ class Graph:
                             graph.add_matching(Matching(edge_id, node1, node2))
         return graph,max_nodeID,max_edgeID
 
+    def unmatched_neigh(self,node):
+        neighbours=[]
+        for edge in self.edges:
+            if edge.node1.node_id==node.node_id:
+                #print(node.node_id,edge.node1.node_id,edge.node2.node_id)
 
+                neighbours.append(edge.node2)
+            elif edge.node2.node_id==node.node_id:
+                #print(node.node_id,edge.node1.node_id,edge.node2.node_id)
+
+                neighbours.append(edge.node1)
+        return neighbours
+    
+    def matched_neigh(self,node):
+        neighbours=[]
+        for edge in self.matchings:
+            if edge.node1.node_id==node.node_id:
+                print(node.node_id,edge.node1.node_id,edge.node2.node_id)
+
+                neighbours.append(edge.node2)
+            elif edge.node2.node_id==node.node_id:
+                print(node.node_id,edge.node1.node_id,edge.node2.node_id)
+
+                neighbours.append(edge.node1)
+        return neighbours
 
 
 
@@ -142,7 +171,7 @@ class InputGUI:
         self.canvas2.pack(side=tk.RIGHT)
 
         
-        self.active_edge = None
+        self.active_edge = Edge(-1,Node(-1,-1,-1),Node(-1,-1,-1))
         
 
         self.last_click_time = 0  # Initialize variable to store last click time
@@ -153,42 +182,138 @@ class InputGUI:
         self.save_button = tk.Button(self.canvas1, text="Save", command=self.save)
         self.save_button.place(x=90, y=140, anchor="e")
         
-        self.forward_button = tk.Button(self.canvas1, text="Forward", command=self.forward)
-        self.forward_button.place(x=10, y=10)  # Adjust the position as needed
+         
 
-        self.backward_button = tk.Button(self.canvas1, text="Backward", command=self.backward)
-        self.backward_button.place(x=100, y=10)  # Adjust the position as needed
+        self.execute_button = tk.Button(self.canvas1,text="Execute",command=self.execute)
+        self.execute_button.place(x=50, y=40) 
         
+        
+
         if file==None:
             self.graph = Graph()
             self.node_id = 0
             self.edge_id = 0
         else:
             self.graph,self.node_id,self.edge_id = Graph.uploadGraph(file)
+            self.displayGraph()
             for nodes in self.graph.nodes:
                 print("Nodes:",nodes.node_id,nodes.x,nodes.y)
             for edges in self.graph.edges:
                 print("edges:",edges.edge_id,edges.node1.node_id,edges.node2.node_id)
             for match in self.graph.matchings:
                 print("matchings:",match.edge_id,match.node1.node_id,match.node2.node_id)
-        
-
-        self.history = []
-        self.history_index=-1
 
         self.canvas1.bind("<Double-Button-1>", self.dbl_clk_b1)
         self.canvas1.bind("<Button-1>", self.sngl_clk_b1)
+    
+
+    
+    def execute(self):
+        self.history = []
+        self.history_index=-1
+        self.forward_button = tk.Button(self.canvas1, text="Forward", command=self.forward)
+        self.forward_button.place(x=100, y=10)  
+        self.backward_button = tk.Button(self.canvas1, text="Backward", command=self.backward)
+        self.backward_button.place(x=10, y=10)
+        self.canvas1.unbind("<Double-Button-1>")
+        self.canvas1.unbind("<Button-1>")
+        self.forest=[]
+        self.run_edmonds()
+        return self
+    
+
+
+    def run_edmonds(self):
+        # 1. Find unsaturated nodes
+        self.unsat_nodes()
+        self.grow_trees()
+
+    def grow_trees(self):
+        neighbours={}
+        for self.tree in self.forest:
+            for node in self.tree.nodes:
+                unM_neighbours=self.graph.unmatched_neigh(node)
+                for i in unM_neighbours:
+                    print("UNMATCHED NEIGHBOURS OF ",node.node_id,"are:",i.node_id)
+                    neighbours[node.node_id].append(i.node_id)
+        print(neighbours)
+                                                    
+
+
+
+        
+        
+    def display_forest(self):
+        count=0
+        r=30
+        for self.tree in self.forest:
+
+            for node in self.tree.nodes:
+                
+                    
+                print(count,node.node_id)
+                self.canvas2.create_oval(node.x-r,node.y-r,node.x+r,node.y+r,fill="red")
+                self.canvas2.tag_raise(self.canvas2.create_text(node.x, node.y, font=("Purisa", 14), text=str(node.node_id)))
+                
+            count+=1
+
+
+ 
+    
+
+    def unsat_nodes(self):
+        unsat = []  # List to store unsaturated nodes
+        for node in self.graph.nodes:
+            is_saturated = False
+            for matching in self.graph.matchings:
+                if node.node_id == matching.node1.node_id or node.node_id == matching.node2.node_id:
+                    is_saturated = True
+                    break
+            if not is_saturated:
+                unsat.append(node)
+        forest=[]#list of graphs for each root node
+        start_x=50
+        start_y=50
+        self.f_node_id=0
+        self.f_edge_id=0
+        spacing = 450/len(unsat)
+        r=10
+        for node in unsat:
+            self.tree=Graph()
+            self.tree.add_node(node.node_id,start_x,start_y)
+
+            self.canvas2.create_oval(start_x-r,start_y-r,start_x+r,start_y+r,fill="red")
+            self.canvas2.tag_raise(self.canvas2.create_text(start_x, start_y, font=("Purisa", 14), text=str(node.node_id)))
+            
+            start_x+=spacing
+            self.forest.append(self.tree)
+        self.display_forest()
+        return self
+
+
+
+
+
+    
+    
+    
+    
+    
     def run(self):
         self.root.mainloop()
 
     
     def save_to_history(self):
+        print("SAVE")
         # Save the current state of the graph to history
         self.history = self.history[:self.history_index + 1]  # Truncate history after current index
         self.history.append(copy.deepcopy(self.graph))  # Deep copy to avoid reference issues
         self.history_index += 1
     def backward(self):
         if self.history_index > 0:
+            while self.history[self.history_index]==self.graph:
+                print("DUPLICATE")
+                self.history_index-=1
             self.history_index -= 1
             self.graph = self.history[self.history_index]
             self.displayGraph()
@@ -205,7 +330,7 @@ class InputGUI:
             return  # Ignore subsequent clicks within the delay period
 
         p = self.proximal(event)
-        self.save_to_history()
+        
         if p == 0:
             self.last_click_time = current_time  # Update last click time
             self.graph.add_node(self.node_id, event.x, event.y)
@@ -215,7 +340,7 @@ class InputGUI:
 
         elif isinstance(p, Node):
             self.graph.remove_node(p)
-        self.save_to_history()
+        
         self.displayGraph()
 
         self.last_click_time = current_time
@@ -223,7 +348,7 @@ class InputGUI:
 
     def sngl_clk_b1(self, event):
         p = self.proximal(event)
-        self.save_to_history()
+        
         if isinstance(p, Node):
             print("NODE")
             self.active_edge = Edge(self.edge_id, p, None)
@@ -231,22 +356,22 @@ class InputGUI:
         elif isinstance(p,Matching):
             print("EDGE3")
             self.graph.remove_matching(p)
-            self.save_to_history()
+            
 
         
         elif isinstance(p, Edge):
             print("EDGE1")
             self.graph.add_matching(p)
-            self.save_to_history()
+            
 
         self.displayGraph() 
     def end_edge(self, event):
         p = self.proximal(event)
         if self.active_edge and isinstance(p, Node) and self.active_edge.node1 != p:
-            self.active_edge.node2 = p
+            self.active_edge.node2 = p # type: ignore
             self.graph.add_edge(self.edge_id, self.active_edge.node1, self.active_edge.node2)
             self.edge_id += 1
-            self.save_to_history()
+            
         self.active_edge = None
         self.canvas1.unbind("<B1-Motion>")
         
@@ -262,8 +387,9 @@ class InputGUI:
             self.canvas1.bind("<ButtonRelease-1>", self.end_edge)
 
     def draw_edge(self, event):
-        if self.active_edge:
-            self.active_edge.node2 = Node(-1, event.x, event.y)
+        if isinstance(self.active_edge,Edge):
+            n=Node(-1, event.x, event.y)
+            self.active_edge.node2 = n
             self.display_temp_edge(event)
 
     def delete_shapes_in_region(self, canvas, x1, y1, x2, y2):
@@ -334,6 +460,7 @@ class InputGUI:
         # If the distance is within the perimeter, return the edge
             if distance <= edge_perimeter:
                 print("match clicked:", match.edge_id)
+                print(isinstance(match,Matching))
                 return match
 
 
@@ -414,8 +541,9 @@ class HomeGui:
         self.uploadTool(selected_value)
 
     def inputTool(self):
-        inputGraphGUI = InputGUI()
-        inputGraphGUI.run()
+        input_gui_instance = InputGUI()
+        
+        input_gui_instance.run()
 
     def uploadTool(self, file):
         uploadGraphGUI = InputGUI(file)
