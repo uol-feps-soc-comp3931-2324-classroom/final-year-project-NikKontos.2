@@ -351,8 +351,6 @@ class InputGUI:
     def run(self):
         self.root.mainloop()
 
-    def execute(self):
-        print("hello")
 
 class HomeGui:
     def __init__(self):
