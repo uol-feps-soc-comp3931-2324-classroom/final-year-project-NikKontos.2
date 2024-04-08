@@ -52,7 +52,6 @@ class Graph:
         if edge.node1.node_id>edge.node2.node_id: #keeps edges in ascending order 
             edge=Edge(self.edge_id,edge.node2,edge.node1)
         for edges in self.edges:
-            print("2:",edges.node1.node_id,edges.node2.node_id)
             if edge.node1==edges.node1 and edge.node2==edges.node2:
                     
                 return print("EDGE EXISTS")
