@@ -1,4 +1,0 @@
-0, x=116, y=297: 1, x=360, y=264, Matched: False-2, x=174, y=457, Matched: False-
-1, x=360, y=264: 0, x=116, y=297, Matched: False-2, x=174, y=457, Matched: True-3, x=356, y=424, Matched: False-
-2, x=174, y=457: 0, x=116, y=297, Matched: False-1, x=360, y=264, Matched: True-3, x=356, y=424, Matched: False-
-3, x=356, y=424: 1, x=360, y=264, Matched: False-2, x=174, y=457, Matched: False-
