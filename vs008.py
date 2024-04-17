@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk,scrolledtext
 
+
 from collections import deque
 import os
 import math
@@ -8,26 +9,6 @@ import copy
 from collections import OrderedDict
 
 
-def test_graph():
-
-
-    g = AdjacencyList()
-    # Manually add nodes and edges
-    nodes = [Node(i, 0, 0) for i in range(6)]
-    for node in nodes:
-        g.nodes.add(node)
-        g.adj_list[node] = []
-    
-    # Create a simple path: 0-1, 1-2, 2-3, 3-4, 4-5
-    edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)]
-    for u, v in edges:
-        g.addEdge(nodes[u], nodes[v])
-
-    # Instantiate and run the algorithm
-    af = AlternatingForest(g)
-    af.initialize_forest()
-    path = af.find_augmenting_path()
-    print(f"Found augmenting path: {path}")
 
 
 
@@ -243,91 +224,7 @@ class AdjacencyList:
             
              
 
-class AlternatingForest(AdjacencyList):
-    def __init__(self, graph, canvas):
-        self.graph2=AdjacencyList()
-        self.graph = graph
-        self.canvas = canvas
-        self.parent = {}
-        self.base = {}
-        self.depth = {}
-        self.roots = set()  # Make sure this is defined
-        self.queue = deque()
-        self.use_matched_edges = False  # Start with unmatched edges first
 
-        self.initialize_forest()
-
-    def initialize_forest(self):
-        # Setting unmatched nodes as roots of the trees
-        for node in self.graph.matched_nodes:
-            print("MATCHED LSIT",node.node_id)
-        
-        for node in self.graph.nodes:
-            if node not in self.graph.matched_nodes:
-                self.graph2.nodes.add(node)
-                self.graph2.adj_list[node]=[]
-                self.parent[node] = None
-                self.base[node] = node
-                self.depth[node] = 0
-                self.roots.add(node)  # Add the node to roots set
-                self.queue.append(node)
-        self.displayForest()
-
-    def printAdjForest(self):
-        print("Printing the adjacency list of the forest:")
-        for node in self.graph2.nodes:
-            edges = self.graph2.adj_list.get(node, [])
-            edges_str = ", ".join([f"{n.node_id} (matched: {m})" for n, m in edges])
-            parent_str = f"Parent: {self.parent[node].node_id if self.parent[node] else 'None'}"
-            print(f"Node {node.node_id} -> {edges_str} | {parent_str}")
-
-    def displayForest(self):
-        self.canvas.delete("all")
-        node_radius = 20
-        self.printAdjForest()
-        for node in self.graph2.nodes:
-            x, y = node.x, node.y
-            color = "green" if node in self.roots else "white"
-            self.canvas.create_oval(x - node_radius, y - node_radius, x + node_radius, y + node_radius, fill=color)
-            self.canvas.create_text(x, y, text=str(node.node_id))
-            if node in self.parent and self.parent[node]:
-                parent = self.parent[node]
-                self.canvas.create_line(node.x, node.y, parent.x, parent.y, fill="blue")
-        self.canvas.update()
-    # Process the queue only for one layer of nodes
-    def grow(self):
-        new_queue = deque()
-        while self.queue:
-            node = self.queue.popleft()
-            for neighbor, is_matched in self.graph.getNeighbours(node):
-                # Check if the neighbor has been visited
-                if neighbor not in self.parent or (self.parent[node] != neighbor and is_matched):
-                    # Ensure the edge type is appropriate for the current phase
-                    if is_matched == self.use_matched_edges:
-                        if neighbor not in self.graph2.nodes:
-                            # Standard growth move, add the neighbor to the tree
-                            self.parent[neighbor] = node
-                            self.depth[neighbor] = self.depth[node] + 1
-                            self.base[neighbor] = self.base[node]
-                            new_queue.append(neighbor)
-                            self.graph2.nodes.add(neighbor)
-                            self.graph2.addEdge(node, neighbor, matched=is_matched)
-                        elif is_matched and self.base[node] != self.base[neighbor]:
-                            # This is a potential blossom
-                            self.contract_blossom(node, neighbor)
-            self.displayForest()
-        self.queue = new_queue
-        self.use_matched_edges = not self.use_matched_edges  # Toggle the edge type for the next phase
-    def grow_alternating_cycle(self):
-        self.grow()  # First grow for unmatched edges
-        self.grow()  # Second grow for matched edges
-
-            
-    def contract_blossom(self, node, neighbor):
-        print("CONTRACTBLOSSOM")
-        # This method contracts the blossom into a single node
-        # Implementation of actual blossom contraction would be here
-        pass
 
         
 
@@ -553,34 +450,13 @@ class InputGUI:
         self.canvas2 = tk.Canvas(self.root1, bg="lightblue", height=2000, width=500)
         self.canvas2.pack(fill=tk.BOTH)
 
-        g = copy.deepcopy(self.graph)
-        alt_forest = AlternatingForest(g,self.canvas2)
-        alt_forest.displayForest()
+
+        self.graph.printAdjList()
         
-        alt_forest.grow_alternating_cycle()
+   
 
-    def alternate_matching(self, path):
-    # Iterate through the path with a step of 2 to toggle the matching of edges
-        for i in range(len(path) - 1):
-            node1, node2 = path[i], path[i + 1]
-            # Find the edge between node1 and node2 and toggle its matched state
-            for j, (neigh, is_matched) in enumerate(self.graph.adj_list[node1]):
-                if neigh == node2:
-                    self.graph.adj_list[node1][j] = (neigh, not is_matched)  # Toggle the matching
-                    break
-            # Since the graph is undirected, toggle the edge in the opposite direction as well
-            for j, (neigh, is_matched) in enumerate(self.graph.adj_list[node2]):
-                if neigh == node1:
-                    self.graph.adj_list[node2][j] = (neigh, not is_matched)  # Toggle the matching
-                    break
 
-            # Optionally update the matched nodes set
-                if not is_matched:  # If the edge was previously unmatched, now it is matched
-                    self.graph.matched_nodes.update([node1, node2])
-                else:  # If the edge was previously matched, now it is unmatched
-                    self.graph.matched_nodes.discard(node1)
-                    self.graph.matched_nodes.discard(node2)
-        return self.graph
+    
 
     def run(self):
         self.root.mainloop()
