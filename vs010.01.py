@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk,scrolledtext
 import itertools
-
+import bisect
 import time
 from collections import deque
 import os
@@ -206,101 +206,179 @@ def point_distance(x1, y1, x2, y2, x, y):
         return distance
 
 
-class Algorithm:
+class Algorithm(Graph):
     def __init__(self, main_graph, colour_cycle=None):
-        self.main_graph=main_graph
-        self.copy_graph=copy.deepcopy(main_graph)
-        
-        
-    
-    def print_edges(self,graph):
-        for u,v,matched in graph.edges(data=True):
-            print("edge",u,v,matched['matched'])
-        
+        if not isinstance(main_graph, Graph):
+            raise ValueError("Provided object is not a Graph instance")
+        elif isinstance(main_graph,Graph):
 
-    def unsat_nodes(self):
-        unsat = SortedSet()
-        # Track nodes that are part of any matched edges
-        matched_nodes = set()
+            self.prime_graph=Graph()
+            self.prime_graph=copy.deepcopy(main_graph)
+            self.tree = Graph ()
+            self.root2 = tk.Tk()
 
-        for u, v, attrs in self.copy_graph.edges(data=True):
-            if attrs.get('matched', False):  # Use get to avoid KeyError
-                matched_nodes.update([u, v])
-        
-        # Now, check for nodes not in matched_nodes
-        for node_id,attrs in self.copy_graph.nodes(data=True):
-            x, y = attrs['x'], attrs['y']
-            if node_id not in matched_nodes:
-                unsat.add(node_id)
-                print(f"Added {node_id} to unsat")
-        
-        #print(f"Unsatisfied nodes: {list(unsat)}")
-        
-        return unsat
-     
-    def grow_unmatched(self, parents):
-        new_edges = set()
-        # To track which parent nodes have already been processed
-        processed_parents = set()
-        processed_nodes = set()
-        for parent in sorted(parents):  # Process in order of node IDs
-            if parent in processed_parents:  # Skip if already processed
-                continue
+            self.root2.style = ttk.Style() # type: ignore
+            self.root2.style.theme_use('clam')  # type: ignore # Change the theme to 'clam' for a modern look
+            self.root2.style.configure("Custom.TButton", foreground="white", background="lightblue", padding=20, font=("Helvetica", 20)) # type: ignore
+            self.root2.title("INPUT Graph ")
+            self.x_size=500
+            self.y_size=700
+            self.root2.geometry("{}x{}".format(self.x_size, self.y_size))
+            self.root2.geometry("+505+10")
+            self.canvas2 = tk.Canvas(self.root2, bg="lightblue", height=2000, width=500)
+            self.canvas2.delete("all")
+            self.canvas2.pack(fill=tk.BOTH)
 
-            # Get all potential unmatched neighbours directly adjacent to the node
-            neighbours = sorted(self.copy_graph.neighbors(parent))
+            self.continue_execution = False
+            self.root2.bind("<Return>", self.on_enter_press)
+
+            self.line_number = 1
+
+            self.highlight_edges = set()
+            self.highlight_nodes = set()
+            self.text = scrolledtext.ScrolledText(self.root2,wrap=tk.WORD, height=5, width=35,font=("Ariel",20),bg="lightblue",borderwidth=2,highlightcolor="lightblue",foreground="black",highlightbackground="lightblue",state='disabled' )
+            self.text.place(x=10, y=10, anchor="nw")
+        
             
-            # Attempt to find an unmatched edge
-            for neighbour in neighbours:
-                if not self.main_graph[parent][neighbour].get('matched', False) and (parent not in processed_parents) and (neighbour not in processed_nodes):
-                    new_edges.add((parent, neighbour))
-                    processed_parents.add(parent)  # Mark only the parent as processed
-                    processed_nodes.add(parent)
-                    processed_nodes.add(neighbour)
-                    break  # Stop after adding one unmatched edge
+        
+    def find_unsaturated_nodes(self):
+        sat_nodes = set()
+        print("a,b")
+        
+        for u,v in self.prime_graph.edges():
 
-        # Remove only processed parent nodes from the copy graph
-        for parent in processed_parents:
-            self.copy_graph.remove_node(parent)  # This removes the node and its associated edges
+            if self.prime_graph[u][v].get('matched',False):
+                sat_nodes.add(u)
+                sat_nodes.add(v)
+        unsat = set(self.prime_graph.nodes()) - sat_nodes
+        print("UNSAT",unsat)
+        return unsat
 
-        # Logging the newly added unmatched edges
-        print("New unmatched edges:", sorted(new_edges))
-        return sorted(new_edges)
 
-    def grow_matched(self, parents):
-        print("GROWMATCHED")
-        new_edges = set()
-        # To track which parent nodes have already been processed
-        processed_parents = set()
-        processed_nodes = set()
-        for parent in sorted(parents):  # Process in order of node IDs
-            if parent not in processed_parents:  # Skip if already processed
-                # Get all potential unmatched neighbours directly adjacent to the node
-                neighbours = sorted(self.copy_graph.neighbors(parent))
+    def add_tree_edge(self, edge,matching=None):
+        u, v = edge 
+        self.tree.add_edge(u, v , matching=matching)
+        
+
+    def stage1(self):
+        roots = self.find_unsaturated_nodes()
+        self.temp_graph=copy.deepcopy(self.prime_graph)
+        paths_list = {}
+        visited = set()
+        first_edges = set()
+        output=f"{self.line_number}.) Find UNSATURATED nodes (No RED edges)\n\t={list(roots)}\n"
+        self.add_text(self.text,output=output)
+        count=0
+        for root in roots:
+            # Correctly accessing node coordinates
+            x = self.prime_graph.nodes[root]['x']
+            y = self.prime_graph.nodes[root]['y']
+            self.tree.new_node(node_id=root, x=x, y=y)
+            
+            output=f"{self.line_number}.) Consider node {root}\n"
+            self.add_text(self.text,output=output)
+            self.delay_graphic(self.tree,self.canvas2)
+
+            paths_list[root] = []
+
+            neighbors = sorted(self.temp_graph.neighbors(root))
+            count=0
+            if neighbors:
+            
+                first_neighbor = neighbors[0]
+                
+                while first_neighbor in visited :
+                    if first_neighbor in self.tree.nodes:
+                        print(first_neighbor,",already in tree")
+                    count+=1
+                    first_neighbor = neighbors[count]
+                visited.add(first_neighbor)
+                visited.add(root)
                 
 
-            
-                print("neigh-",neighbours)
-            # Attempt to find an unmatched edge
-                for neighbour in neighbours:
-                    
-                    if  self.main_graph[parent][neighbour].get('matched', False) and (parent not in processed_parents) and (parent not in processed_nodes) and (neighbour not in processed_nodes):
-                        new_edges.add((parent, neighbour))
-                        processed_parents.add(parent)  # Mark only the parent as processed
-                        processed_nodes.add(parent)
-                        processed_nodes.add(neighbour)
-                        print("removeing nodes-",parent,neighbour)
-                        break  # Stop after adding one unmatched edge
+                output=f"{self.line_number}.) Find smallest unvisited neighbour of node {root}\n\t = node {first_neighbor}\n"
+                self.add_text(self.text,output=output)
+                if first_neighbor in roots:
+                    output=f"{self.line_number}.) nodes {root} and {first_neighbor} are unsatruated neighbours so we can make them a matching.\n"
+                    self.add_text(self.text,output=output)
+                    x = self.prime_graph.nodes[first_neighbor]['x']
+                    y = self.prime_graph.nodes[first_neighbor]['y']
+                    self.tree.new_node(node_id=first_neighbor, x=x, y=y)
 
-        # Remove only processed parent nodes from the copy graph
-        for parent in processed_parents:
-            self.copy_graph.remove_node(parent)  # This removes the node and its associated edges
+                    self.add_tree_edge((root,first_neighbor),True)
 
-        # Logging the newly added unmatched edges
-        print("New unmatched edges:", sorted(new_edges))
-        return sorted(new_edges)
+                    self.delay_graphic(self.tree,self.canvas2)  
+                    self.add_tree_edge((root,first_neighbor))
+
+                    self.delay_graphic(self.tree,self.canvas2) 
+                    return root,first_neighbor
+                else:
+                    x = self.prime_graph.nodes[first_neighbor]['x']
+                    y = self.prime_graph.nodes[first_neighbor]['y']
+                    self.tree.new_node(node_id=first_neighbor, x=x, y=y)
+
+                    self.add_tree_edge((root,first_neighbor))
+                    self.delay_graphic(self.tree,self.canvas2)  
+        
+        
+        
+
+    def on_enter_press(self,event):
+            self.continue_execution = True  # Change the flag to True when Enter is pressed
+
+
+    def add_text(self,text,output):
+        text.config(state='normal')
+        text.insert(tk.END, output)  # Insert at the end of the text widget
+        self.line_number += 1  # Increment line number for the next output
+        text.see(tk.END)
+        text.update() 
+        text.config(state='disabled')
+
+
+    def delay_graphic(self,graph,canvas):
+        self.continue_execution=False
+        while not self.continue_execution:
+            self.root2.update() 
+        self.display_graph(graph,canvas)
+        return 0
+
+    def display_graph(self,graph,canvas):
+        node_radius = 20
+        canvas.delete("all")  # Clear the canvas entirely to redraw.
+
+        # Draw edges with colours based on their 'matched' attribute
+        for u, v in graph.edges():
+            if self.prime_graph.has_node(u) and self.prime_graph.has_node(v):  # Check if both nodes exist
+                matched = graph[u][v].get('matched', False)
+                line_colour = "red" if matched else "blue"
+                x1, y1 = self.prime_graph.nodes[u]['x'], self.prime_graph.nodes[u]['y']
+                x2, y2 = self.prime_graph.nodes[v]['x'], self.prime_graph.nodes[v]['y']
+                canvas.create_line(x1, y1, x2, y2, fill=line_colour, width=2)
+
+        # Draw nodes
+        for node_id, attrs in graph.nodes(data=True):
+            x, y = attrs.get('x', 0), attrs.get('y', 0) 
+            #print("NODE:",node_id,x,y)
+            #print("1display!!",node_id,x,y)
+            canvas.create_oval(x - node_radius, y - node_radius, x + node_radius, y + node_radius,fill="white", outline="black")
+            canvas.create_text(x, y, text=str(node_id))
+        canvas.update()
     
+        
+
     
+class Path:
+    def __init__(self,root):
+        self.path = {}
+        self.path[root]=[]
+
+    def add_edge_to_path(self,edge):
+        u,v=edge
+        self.path[u].append(v)
+        print(self.path)
+
+
 
 
 
@@ -319,9 +397,7 @@ class InputGUI:
         self.canvas1 = tk.Canvas(self.root, bg="lightblue", height=2000, width=500)
         self.canvas1.pack(fill=tk.BOTH)
         
-        
-        
-        
+
 
         
         self.line_number = 1
@@ -363,154 +439,22 @@ class InputGUI:
             self.load_graph(file)
         self.highlight_edges = set()
 
-    def on_enter_press(self,event):
-            self.continue_execution = True  # Change the flag to True when Enter is pressed
-
+    
     def execute(self):
         #self.main_graph.display_graph1()
 
-
         
-        self.root2 = tk.Tk()
-        self.root2.style = ttk.Style() # type: ignore
-        self.root2.style.theme_use('clam')  # type: ignore # Change the theme to 'clam' for a modern look
-        self.root2.style.configure("Custom.TButton", foreground="white", background="lightblue", padding=20, font=("Helvetica", 20)) # type: ignore
-        self.root2.title("INPUT Graph ")
-        self.x_size=500
-        self.y_size=700
-        self.root2.geometry("{}x{}".format(self.x_size, self.y_size))
-        self.root2.geometry("+505+10")
-        self.canvas2 = tk.Canvas(self.root2, bg="lightblue", height=2000, width=500)
-        self.canvas2.delete("all")
-        self.canvas2.pack(fill=tk.BOTH)
-
-        self.continue_execution = False
-        self.root2.bind("<Return>", self.on_enter_press)
-        self.highlight_edges = set()
-        self.highlight_nodes = set()
-        self.leaves = set()
-        self.tree =Graph()
-        self.algo = Algorithm(self.main_graph) 
-        self.copy = copy.deepcopy(self.main_graph)
         
-        while not self.main_graph.is_maximum_matching():
-            self.algo_body(self.algo)
-            if self.main_graph.is_maximum_matching():
-                print("Maximal matching achieved.")
-                break  # Exit the loop if maximal matching is achieved
-            else:
-                print("Continuing to find maximal matching...")
-        print("}}}}",self.tree.is_maximum_matching())
-        
-    def algo_body(self,algo):
-        
-        self.algo=algo
-        
-
-        #roots
-
-
-        unsat_nodes1=list(self.algo.unsat_nodes())
-        roots=copy.deepcopy(unsat_nodes1)
-        for node in unsat_nodes1:
-            self.tree.new_node(None,node,self.main_graph.nodes[node]['x'],self.main_graph.nodes[node]['y'])
-
-            output = f"{self.line_number}__ Plant UNSATURATED node {node} as a root of the forest.\n"
-            self.add_text(output)
-            self.delay_graphic(self.tree,self.canvas2)
-        
-
-        #layer1
-        new_unmatched_edges=self.algo.grow_unmatched(unsat_nodes1)
-        
-        for u,v in new_unmatched_edges:
-            self.tree.new_node(None,v,self.main_graph.nodes[v]['x'],self.main_graph.nodes[v]['y'])
-            
-            self.tree.add_edge(u,v)
-            
-            #print("unsat=",unsat1)
-            #print("!!")
-            self.leaves.add(v)
-            output = f"{self.line_number}__ LOWEST NODE IN TREE {u}: - SMALLEST neighbour is {v} \n \t - {v} is SATURATED so \n \t--> Edge ({u},{v}) can be added to the tree!.\n"
-            self.add_text(output)
-            
-            self.tree.add_edge(u,v)         
-            self.delay_graphic(self.tree,self.canvas2)
-  
-
-        for u,v in self.tree.edges():
-            if u in roots and v in roots and self.tree.has_edge(u,v):
+        self.algo=Algorithm(self.main_graph)
+        self.first = self.algo.stage1()
+        ##handle cases after growing first layer of forest edges
+        if isinstance(self.first, tuple):
+            if self.main_graph.has_edge(self.first[0],self.first[1]):
                 
-                print("(((((((",u,v,")))))))")
-                output = f"Line {self.line_number}: Nodes {u},{v} are both unsaturated so theyre adjoinging edge can be augmented!.\n"
-                self.add_text(output)
-                print(u,v,"AUGMENT")
-                self.tree.toggle_matching(u,v)
-                self.main_graph.toggle_matching(u,v)
-                #print(self.main_graph.toggle_matching(u,v))
-                self.delay_graphic(self.main_graph,self.canvas1)
-                self.delay_graphic(self.tree,self.canvas2)
-                self.root.update()
-
-                self.root2.iconify()
-                return self.main_graph##########
-                print("JJJJ")
-
-        for l in self.leaves:
-            print(l)
-
-        new_matched_edges=self.algo.grow_matched(self.leaves)
-
-        for u,v in new_matched_edges:
-            self.tree.new_node(None,v,self.main_graph.nodes[v]['x'],self.main_graph.nodes[v]['y'])
-            
-            self.tree.add_edge(u,v)
-            
-            #print("unsat=",unsat1)
-            #print("!!")
-            self.leaves.add(v)
-            output = f"{self.line_number}__ LOWEST NODE IN TREE {u}: - SMALLEST neighbour is {v} \n \t - {v} is SATURATED so \n \t--> Edge ({u},{v}) can be added to the tree!.\n"
-            self.add_text(output)
-            
-            self.tree.add_edge(u,v)
-            self.display_graph(self.main_graph,self.canvas1)
-         
-            self.delay_graphic(self.tree,self.canvas2)
-            #self.delay_graphic(self.algo.copy_graph,self.canvas2)
-  
-        l.clear()
-        for u,v in self.tree.edges():
-            if u in roots and v in roots and self.tree.has_edge(u,v):
-                
-                print("(((((((",u,v,")))))))")
-                output = f"Line {self.line_number}: Nodes {u},{v} are both unsaturated so theyre adjoinging edge can be augmented!.\n"
-                self.add_text(output)
-                print(u,v,"AUGMENT")
-                self.tree.toggle_matching(u,v)
-                self.main_graph.toggle_matching(u,v)
-                #print(self.main_graph.toggle_matching(u,v))
-                self.delay_graphic(self.main_graph,self.canvas1)
-                self.delay_graphic(self.tree,self.canvas2)
-                self.root.update()
-
-                self.root2.iconify()
-                return self.main_graph##########
-                print("JJJJ")
-
-        for l in self.leaves:
-            print(l)
+                self.main_graph.toggle_matching(self.first[0],self.first[1])
+                self.display_graph(self.main_graph,self.canvas1)
         
-
-
-
-        #self.delay_graphic(new_matched_edges,self.canvas2)
-        print("QQQQ")
-
-        
-        
-        unsat3=self.algo.unsat_nodes()
-        print(unsat3)
-        return self.main_graph
+     
 
     def load_graph(self, filename,):
         if filename:
@@ -658,12 +602,7 @@ class InputGUI:
         self.root.mainloop()
 
 
-    def delay_graphic(self,graph,canvas):
-        self.continue_execution=False
-        while not self.continue_execution:
-            self.root2.update() 
-        self.display_graph(graph,canvas)
-        return 0
+    
     
     
     def add_text(self,output):
