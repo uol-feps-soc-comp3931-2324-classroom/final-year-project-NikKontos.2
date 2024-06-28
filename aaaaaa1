@@ -1,4 +1,0 @@
-Adjacency List
-Node 0: 2 (Matched: False), 1 (Matched: True)
-Node 1: 2 (Matched: False), 0 (Matched: True)
-Node 2: 0 (Matched: False), 1 (Matched: False)
