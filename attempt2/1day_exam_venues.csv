@@ -1,0 +1,16 @@
+﻿exam_id,exam_name,date,start_time,duration,end_time,session_size,time_slot
+0,Introduction to Psychology,20-May-24,9,2,11,1,1
+1,Principles of Economics,20-May-24,9,2,11,7,1
+2,Organic Chemistry I,20-May-24,9,2,11,68,1
+3,Calculus II,20-May-24,9,2,11,90,1
+4,Modern European History,20-May-24,9,2,11,13,1
+5,Introduction to Sociology,20-May-24,11,2,13,1,2
+6,Computer Science Fundamentals,20-May-24,11,2,13,1,2
+7,Environmental Science,20-May-24,11,2,13,1,2
+8,Microbiology,20-May-24,11,2,13,5,2
+9,Business Management,20-May-24,11,2,13,8,2
+10,World Literature,20-May-24,13,2,15,1,3
+11,Human Anatomy and Physiology,20-May-24,13,2,15,8,3
+12,Introduction to Philosophy,20-May-24,13,2,15,5,3
+13,Advanced Physics,20-May-24,13,2,15,5,3
+14,Political Science: Government and Politics,20-May-24,13,2,15,155,3
