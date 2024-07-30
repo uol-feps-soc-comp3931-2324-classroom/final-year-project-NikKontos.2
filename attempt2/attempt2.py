@@ -3,19 +3,21 @@ import pulp
 from collections import defaultdict
 class Invigilator:
     def __init__(self, id , name, avail,lead,size_pref):
-        self.id = id
+        self.id = int(id)
         self.name = name
         self.avail = [int(x) for x in avail.split(',')]
-        self.lead = lead
+        self.lead = int(lead)
         self.size_pref = [str(x) for x in size_pref.split(',')]
     def __repr__(self):
-        return f"\nid={self.id}, name={self.name}, avail={self.avail}, lead={self.lead}, size_pref={self.size_pref}"
+        return f"{self.id},{self.name}, {self.avail}, {self.lead},{self.size_pref}"
 
 
 
 class Exam:
     def __init__(self, id , name, date,session_size):
+        
         self.id = int(id)
+        
         self.name = name
         self.date = date
         self.session_size = int(session_size)
@@ -57,15 +59,15 @@ class Exam:
             invig_required=12
             size_code='l'
 
-        self.invig_required = invig_required
+        self.invig_required = int(invig_required)
         self.size_code=size_code
     def __repr__(self):
-        return f"\nid={self.id}, exam={self.name}, date={self.date}, session_size={self.session_size},invig_required={self.invig_required},size_code={self.size_code}"
+        return f"\n{self.id}, {self.name}, {self.date},{self.session_size},{self.invig_required},{self.size_code}"
 
 
 
 
-# Read CSV into a dictionary of lists
+
 def read_invig_as_dict(filename):
     invigilators = []
     with open(filename, mode='r', newline='') as csvfile:
@@ -89,17 +91,19 @@ def read_exams_as_dict(filename):
             exam_id,exam_name,date = row[0],row[1],row[2]
             session_size,time_slot = row[6],row[7]
             exam = Exam(exam_id,exam_name,date,session_size)
-            sessions[(time_slot)].append(exam)
+            sessions[int(time_slot)].append(exam)
     return sessions
+
+
 
 def import_files(invig_file,exams_file):
 
     invigilators = read_invig_as_dict(invig_file)
     
-
-
     exam_sessions = read_exams_as_dict(exams_file)
     
+
+
     return exam_sessions,invigilators
 def output_imports():
     print(invigilators,exam_sessions)
@@ -110,3 +114,115 @@ exams_file = '1day_exam_venues.csv'
 exam_sessions,invigilators = import_files(invig_file,exams_file)
 
 output_imports()
+
+max_time_slot = max(exam_sessions.keys())
+
+
+
+# Create the problem variable
+prob = pulp.LpProblem("Invigilator_Allocation", pulp.LpMinimize)
+
+# Decision Variables
+x = pulp.LpVariable.dicts("assign", 
+                         [(invigilator.name, time_slot, exam.id) 
+                          for invigilator in invigilators 
+                          for time_slot in exam_sessions
+                          for exam in exam_sessions[time_slot] if int(time_slot) in invigilator.avail], 
+                         cat='Binary')
+
+#Penalties
+penalty_matrix = {
+    's': {'s': 0, 'm': 10, 'l': 20},
+    'm': {'s': 10, 'm': 0, 'l': 10},
+    'l': {'s': 20, 'm': 10, 'l': 0}
+}
+
+penalty = {}
+
+
+for invigilator in invigilators:
+    for time_slot in exam_sessions:
+        for exam in exam_sessions[time_slot]:
+            penalty[(invigilator.name, time_slot, exam.id)] = min(
+                [penalty_matrix[exam.size_code].get(pref, 20) for pref in invigilator.size_pref]
+            )
+
+
+
+#Objective function: Minimise inviglators assigned and penalties
+#x[invigilator.name, time_slot, exam.id] *
+prob += pulp.lpSum([x[invigilator.name, time_slot, exam.id] * penalty[(invigilator.name, time_slot, exam.id)] 
+                    for invigilator in invigilators 
+                    for time_slot in exam_sessions
+                    for exam in exam_sessions[time_slot] if int(time_slot) in invigilator.avail]), "Total Penalty"
+
+
+
+# Constraints
+for time_slot, exams in exam_sessions.items():
+    for exam in exams:
+        # Ensure required number of invigilators are assigned
+        prob += pulp.lpSum([x[invigilator.name, time_slot, exam.id] 
+                            for invigilator in invigilators 
+                            if int(time_slot) in invigilator.avail]) >= exam.invig_required, f"Session_{exam.id}_Requirement"
+        
+        # Ensure at least one lead examiner is assigned to each exam
+        prob += pulp.lpSum([x[invigilator.name, time_slot, exam.id] 
+                            for invigilator in invigilators 
+                            if int(time_slot) in invigilator.avail and invigilator.lead == 1]) >= 1, f"Session_{exam.id}_Lead_Requirement"
+
+for invigilator in invigilators:
+    for slot in invigilator.avail:
+        prob += pulp.lpSum([x[invigilator.name, slot, exam.id] 
+                            for exam in exam_sessions[slot]]) <= 1, f"Invigilator_{invigilator.name}_Slot_{slot}"
+
+prob.solve()
+
+# Initialize results dictionary with all slots
+results = {invigilator.name: {slot: [] for slot in range(1, max_time_slot+1)} for invigilator in invigilators}
+
+# Track used invigilators
+used_invigilators = set()
+
+# Fill the results dictionary with exam names
+for invigilator in invigilators:
+    for slot in invigilator.avail:
+        for exam in exam_sessions[slot]:
+            if pulp.value(x[invigilator.name, slot, exam.id]) == 1:
+                results[invigilator.name][slot].append(exam.name)
+                used_invigilators.add(invigilator.name)
+
+print("Invigilator\\TimeSlot\t" + "\t".join(map(str, range(1, max_time_slot+1 ))))
+for invigilator in invigilators:
+    row = f"{invigilator.name}"
+    for slot in range(1, max_time_slot):
+        exams_for_slot = results[invigilator.name][slot]
+        if exams_for_slot:
+            row += "\t" + ",".join(exams_for_slot)
+        else:
+            row += "\t-"
+    print(row)
+
+print(f"Status: {pulp.LpStatus[prob.status]}")
+print(f"Total Invigilators Used: {len(used_invigilators)}")
+print(f"Total Penalty: {pulp.value(prob.objective)}")
+
+
+with open('invigilator_assignments.csv', 'w', newline='') as csvfile:
+    csv_writer = csv.writer(csvfile)
+    
+    # Write header
+    csv_writer.writerow(["Invigilator\\TimeSlot"] + list(map(str, range(1, max_time_slot+1))))
+    
+    # Write rows
+    for invigilator in invigilators:
+        row = [invigilator.name]
+        for slot in range(1, max_time_slot+1):
+            exams_for_slot = results[invigilator.name][slot]
+            if exams_for_slot:
+                row.append(",".join(exams_for_slot))
+            else:
+                row.append("-")
+        csv_writer.writerow(row)
+
+print("Results have been exported to invigilator_assignments.csv")
