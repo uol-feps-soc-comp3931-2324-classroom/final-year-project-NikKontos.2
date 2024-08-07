@@ -90,7 +90,7 @@ prob.solve()
 # Initialize the results dictionary with all slots
 results = {invigilator: {slot: [] for slot in ['1', '2', '3']} for invigilator in invigilators}
 
-# Populate the results dictionary with exam_id
+# Fill the results dictionary with exam_id
 for invigilator in invigilators:
     for slot in invigilators[invigilator]:
         for exam_id in sessions[slot].keys():
@@ -116,10 +116,9 @@ print(f"Total Invigilators Used: {pulp.value(prob.objective)}")
 with open('invigilator_assignments.csv', 'w', newline='') as csvfile:
     csv_writer = csv.writer(csvfile)
     
-    # Write header
+    
     csv_writer.writerow(["Invigilator\\TimeSlot", "1", "2", "3"])
     
-    # Write rows
     for invigilator in invigilators:
         row = [invigilator]
         for slot in ['1', '2', '3']:
