@@ -4,7 +4,7 @@ from collections import defaultdict
 import random
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font
-import colorsys
+import coloursys
 
 class Invigilator:
     def __init__(self, id, name, avail, lead, size_pref):
@@ -317,29 +317,29 @@ else:
     print("\nAll invigilators have assignments.")
 
 
-# Generate colors that change progressively and ensure readability
-def generate_color_palette(num_colors):
-    colors = []
-    for i in range(num_colors):
-        hue = i / num_colors
+# Generate colours that change progressively and ensure readability
+def generate_colour_palette(num_colours):
+    colours = []
+    for i in range(num_colours):
+        hue = i / num_colours
         lightness = 0.7
         saturation = 0.8
-        rgb = colorsys.hls_to_rgb(hue, lightness, saturation)
-        hex_color = "{:02x}{:02x}{:02x}".format(int(rgb[0]*255), int(rgb[1]*255), int(rgb[2]*255))
-        colors.append(hex_color)
-    return colors
-# Ensure exam_ids are consistently tracked and associated with colors
+        rgb = coloursys.hls_to_rgb(hue, lightness, saturation)
+        hex_colour = "{:02x}{:02x}{:02x}".format(int(rgb[0]*255), int(rgb[1]*255), int(rgb[2]*255))
+        colours.append(hex_colour)
+    return colours
+# Ensure exam_ids are consistently tracked and associated with colours
 exam_ids = {exam.id for time_slot in exam_sessions for exam in exam_sessions[time_slot]}
 
-# Generate and assign colors
+# Generate and assign colours
 
-exam_colors = {}
-color_palette = generate_color_palette(len(exam_ids) + 5)  # Ensure the palette is large enough
+exam_colours = {}
+colour_palette = generate_colour_palette(len(exam_ids) + 5)  # Ensure the palette is large enough
 
 for i, exam_id in enumerate(sorted(exam_ids)):
-    # Use modular arithmetic to skip 5 colors for each exam
-    color_index = (i * 6) % len(color_palette)
-    exam_colors[exam_id] = color_palette[color_index]
+    # Use modular arithmetic to skip 5 colours for each exam
+    colour_index = (i * 6) % len(colour_palette)
+    exam_colours[exam_id] = colour_palette[colour_index]
 # Prepare data for Excel output
 columns = ["Invigilator"] + [f"Slot {slot}" for slot in range(1, max_time_slot + 1)]
 wb = Workbook()
@@ -378,11 +378,11 @@ for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=2, max_col=ws.max
             invigilator_name = ws.cell(row=cell.row, column=1).value
             invigilator = next((inv for inv in invigilators if inv.name == invigilator_name), None)
             if invigilator and invigilator.lead == 1:
-                cell.font = Font(color="FFFFFF")
+                cell.font = Font(colour="FFFFFF")
             for exam_id in exam_ids_in_cell:
-                if exam_id in exam_colors:
-                    cell.fill = PatternFill(start_color=exam_colors[exam_id], end_color=exam_colors[exam_id], fill_type="solid")
+                if exam_id in exam_colours:
+                    cell.fill = PatternFill(start_colour=exam_colours[exam_id], end_colour=exam_colours[exam_id], fill_type="solid")
 # Save the workbook
 wb.save('invigilator_assignments.xlsx')
 
-print("Results have been exported to invigilator_assignments.xlsx")
+print("Results have been exported to invigilator_assignments.xlsx\nEach exam is assigned a specific colour.\nLead examiners assignments are displayed in white text.")
