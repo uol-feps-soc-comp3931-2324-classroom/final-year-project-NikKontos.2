@@ -4,7 +4,7 @@ from collections import defaultdict
 import random
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font
-import coloursys
+import colorsys
 
 class Invigilator:
     def __init__(self, id, name, avail, lead, size_pref):
@@ -324,7 +324,7 @@ def generate_colour_palette(num_colours):
         hue = i / num_colours
         lightness = 0.7
         saturation = 0.8
-        rgb = coloursys.hls_to_rgb(hue, lightness, saturation)
+        rgb = colorsys.hls_to_rgb(hue, lightness, saturation)
         hex_colour = "{:02x}{:02x}{:02x}".format(int(rgb[0]*255), int(rgb[1]*255), int(rgb[2]*255))
         colours.append(hex_colour)
     return colours
@@ -378,10 +378,10 @@ for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=2, max_col=ws.max
             invigilator_name = ws.cell(row=cell.row, column=1).value
             invigilator = next((inv for inv in invigilators if inv.name == invigilator_name), None)
             if invigilator and invigilator.lead == 1:
-                cell.font = Font(colour="FFFFFF")
+                cell.font = Font(color="FFFFFF")
             for exam_id in exam_ids_in_cell:
                 if exam_id in exam_colours:
-                    cell.fill = PatternFill(start_colour=exam_colours[exam_id], end_colour=exam_colours[exam_id], fill_type="solid")
+                    cell.fill = PatternFill(start_color=exam_colours[exam_id], end_color=exam_colours[exam_id], fill_type="solid")
 # Save the workbook
 wb.save('invigilator_assignments.xlsx')
 
