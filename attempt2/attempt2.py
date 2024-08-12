@@ -1,6 +1,10 @@
-import csv
+import pandas as pd
 import pulp
 from collections import defaultdict
+import random
+from openpyxl import Workbook
+from openpyxl.styles import PatternFill, Font
+import colorsys
 
 class Invigilator:
     def __init__(self, id, name, avail, lead, size_pref):
@@ -63,26 +67,37 @@ class Exam:
 
 def read_invig_as_dict(filename):
     invigilators = []
-    with open(filename, mode='r', newline='') as csvfile:
-        csv_reader = csv.reader(csvfile)
-        next(csv_reader)  # Skip header
-        for row in csv_reader:
-            invig_id, invig_name = row[0], row[1]
-            avail, lead, size_pref = row[2], row[3], row[4]
-            invigilator = Invigilator(invig_id, invig_name, avail, lead, size_pref)
-            invigilators.append(invigilator)
+    df = pd.read_excel(filename)
+    for _, row in df.iterrows():
+        invig_id, invig_name = row['invig_id'], row['name']
+        avail, lead, size_pref = row['time_slot_availability'], row['lead'], row['size_preference']
+        invigilator = Invigilator(invig_id, invig_name, avail, lead, size_pref)
+        invigilators.append(invigilator)
+    random.shuffle(invigilators)
     return invigilators
 
 def read_exams_as_dict(filename):
     sessions = defaultdict(list)
-    with open(filename, mode='r', newline='') as csvfile:
-        csv_reader = csv.reader(csvfile)
-        next(csv_reader)  # Skip header
-        for row in csv_reader:
-            exam_id, exam_name, date = row[0], row[1], row[2]
-            session_size, time_slot = row[6], row[7]
-            exam = Exam(exam_id, exam_name, date, session_size)
-            sessions[int(time_slot)].append(exam)
+    df = pd.read_excel(filename)
+    
+    for _, row in df.iterrows():
+        exam_id, exam_name, date = row['exam_id'], row['exam_name'], row['date']
+        session_size, time_slot = row['session_size'], row['time_slot']
+        
+        # Check if time_slot is NaN or cannot be converted to an integer
+        if pd.isna(time_slot):
+            print(f"Skipping exam {exam_name} with ID {exam_id} due to missing time_slot")
+            continue
+        
+        try:
+            time_slot = int(time_slot)
+        except ValueError:
+            print(f"Skipping exam {exam_name} with ID {exam_id} due to invalid time_slot value: {time_slot}")
+            continue
+        
+        exam = Exam(exam_id, exam_name, date, session_size)
+        sessions[time_slot].append(exam)
+    
     return sessions
 
 def import_files(invig_file, exams_file):
@@ -93,8 +108,8 @@ def import_files(invig_file, exams_file):
 def output_imports():
     print(invigilators, exam_sessions)
 
-invig_file = '75_invigilators.csv'
-exams_file = '1day_exam_venues.csv'
+invig_file = 'large_invigilators.xlsx'
+exams_file = 'large_exam_venues.xlsx'
 
 exam_sessions, invigilators = import_files(invig_file, exams_file)
 
@@ -110,8 +125,23 @@ x = pulp.LpVariable.dicts("assign",
                          [(invigilator.name, time_slot, exam.id) 
                           for invigilator in invigilators 
                           for time_slot in exam_sessions
-                          for exam in exam_sessions[time_slot] if int(time_slot) in invigilator.avail], 
+                          for exam in exam_sessions[time_slot]], 
                          cat='Binary')
+
+# Variable to track if an invigilator is assigned to an unavailable timeslot
+y = pulp.LpVariable.dicts("unavailable", 
+                         [(invigilator.name, time_slot) 
+                          for invigilator in invigilators 
+                          for time_slot in exam_sessions], 
+                         cat='Binary')
+
+# Add constraints to track unavailable assignments
+for invigilator in invigilators:
+    for time_slot in exam_sessions:
+        if time_slot not in invigilator.avail:
+            prob += pulp.lpSum([x[invigilator.name, time_slot, exam.id] 
+                                for exam in exam_sessions[time_slot]]) <= y[invigilator.name, time_slot] * len(exam_sessions[time_slot]), \
+                                f"Unavailable_Assignment_{invigilator.name}_{time_slot}"
 
 # Variable for unmet invigilation requirements
 unmet_invig = pulp.LpVariable.dicts("unmet", 
@@ -142,36 +172,61 @@ for invigilator in invigilators:
                 [penalty_matrix[exam.size_code].get(pref, 20) for pref in invigilator.size_pref]
             )
 
-# Objective function: Minimize penalties and unmet invigilation requirements
+# Objective function: Minimize penalties and the number of unavailable assignments
 large_penalty = 1000  # Large penalty for unmet invigilation requirements
-prob += (pulp.lpSum([x[invigilator.name, time_slot, exam.id] * penalty[(invigilator.name, time_slot, exam.id)] 
-                    for invigilator in invigilators 
-                    for time_slot in exam_sessions
-                    for exam in exam_sessions[time_slot] if int(time_slot) in invigilator.avail]) 
-        + large_penalty * (pulp.lpSum(unmet_invig[time_slot, exam.id] for time_slot in exam_sessions for exam in exam_sessions[time_slot])
-                           + pulp.lpSum(unmet_lead[time_slot, exam.id] for time_slot in exam_sessions for exam in exam_sessions[time_slot])), 
-        "Total Penalty and Unmet Requirements")
+unavailable_penalty = 100  # Penalty for assigning to unavailable time slots
 
-# Constraints
+prob += (
+    pulp.lpSum(
+        [
+            (x[invigilator.name, time_slot, exam.id] * penalty[(invigilator.name, time_slot, exam.id)]
+             + random.uniform(0, 1e-5))  # Add small random perturbation
+            for invigilator in invigilators
+            for time_slot in exam_sessions
+            for exam in exam_sessions[time_slot]
+        ]
+    )
+    + large_penalty * (
+        pulp.lpSum(
+            unmet_invig[time_slot, exam.id] for time_slot in exam_sessions for exam in exam_sessions[time_slot]
+        )
+        + pulp.lpSum(
+            unmet_lead[time_slot, exam.id] for time_slot in exam_sessions for exam in exam_sessions[time_slot]
+        )
+    )
+    + unavailable_penalty
+    * pulp.lpSum(
+        [
+            y[invigilator.name, time_slot]
+            for invigilator in invigilators
+            for time_slot in exam_sessions
+        ]
+    ),
+    "Total Penalty, Unmet Requirements, and Unavailable Assignments",
+)
+
+
+# Constraints for ensuring sufficient invigilators and lead examiner are assigned
 for time_slot, exams in exam_sessions.items():
     for exam in exams:
         # Ensure required number of invigilators are assigned or mark as unmet
         prob += (pulp.lpSum([x[invigilator.name, time_slot, exam.id] 
-                             for invigilator in invigilators 
-                             if int(time_slot) in invigilator.avail]) 
+                             for invigilator in invigilators]) 
                 + unmet_invig[time_slot, exam.id]) >= exam.invig_required, f"Session_{exam.id}_Requirement"
         
         # Ensure at least one lead examiner is assigned to each exam or mark as unmet
         prob += (pulp.lpSum([x[invigilator.name, time_slot, exam.id] 
                             for invigilator in invigilators 
-                            if int(time_slot) in invigilator.avail and invigilator.lead == 1]) 
+                            if invigilator.lead == 1]) 
                 + unmet_lead[time_slot, exam.id]) >= 1, f"Session_{exam.id}_Lead_Requirement"
 
+# Constraint to ensure an invigilator is assigned to only one exam per time slot
 for invigilator in invigilators:
-    for slot in invigilator.avail:
+    for slot in range(1, max_time_slot+1):  # Iterate over all possible slots
         prob += pulp.lpSum([x[invigilator.name, slot, exam.id] 
                             for exam in exam_sessions[slot]]) <= 1, f"Invigilator_{invigilator.name}_Slot_{slot}"
 
+# Solve the problem
 prob.solve()
 
 # Initialize results dictionary with all slots
@@ -186,7 +241,7 @@ unmet_lead_requirements = []
 
 # Fill the results dictionary with exam names
 for invigilator in invigilators:
-    for slot in invigilator.avail:
+    for slot in range(1, max_time_slot+1):  # Iterate over all possible slots
         for exam in exam_sessions[slot]:
             if pulp.value(x[invigilator.name, slot, exam.id]) == 1:
                 results[invigilator.name][slot].append(exam.name)
@@ -230,22 +285,104 @@ if unmet_invig_requirements or unmet_lead_requirements:
 else:
     print("\nAll exam requirements have been met.")
 
-# Write results to CSV
-with open('invigilator_assignments.csv', 'w', newline='') as csvfile:
-    csv_writer = csv.writer(csvfile)
-    
-    # Write header
-    csv_writer.writerow(["Invigilator\\TimeSlot"] + list(map(str, range(1, max_time_slot+1))))
-    
-    # Write rows
-    for invigilator in invigilators:
-        row = [invigilator.name]
-        for slot in range(1, max_time_slot+1):
-            exams_for_slot = results[invigilator.name][slot]
-            if exams_for_slot:
-                row.append(",".join(exams_for_slot))
-            else:
-                row.append("-")
-        csv_writer.writerow(row)
+# List invigilators assigned to unavailable slots
+unavailable_assignments = []
 
-print("Results have been exported to invigilator_assignments.csv")
+for invigilator in invigilators:
+    for time_slot in exam_sessions:
+        if (invigilator.name, time_slot) in y:  # Check if this time slot exists for this invigilator
+            if pulp.value(y[invigilator.name, time_slot]) == 1:
+                unavailable_assignments.append((invigilator.name, time_slot))
+
+# Sort the list of unavailable assignments alphabetically by invigilator name
+unavailable_assignments.sort()
+
+# Print the list of invigilators assigned to unavailable slots
+if unavailable_assignments:
+    print("\nInvigilators assigned to unavailable slots:")
+    for invigilator_name, time_slot in unavailable_assignments:
+        print(f"Invigilator: {invigilator_name}, Time Slot: {time_slot}")
+else:
+    print("\nNo invigilators were assigned to unavailable slots.")
+
+# Identify invigilators with no assignments
+unassigned_invigilators = [invigilator.name for invigilator in invigilators if not any(results[invigilator.name][slot] for slot in range(1, max_time_slot+1))]
+
+# Print the list of unassigned invigilators
+if unassigned_invigilators:
+    print("\nInvigilators with no assignments:")
+    for invigilator_name in sorted(unassigned_invigilators):
+        print(f"Invigilator: {invigilator_name}")
+else:
+    print("\nAll invigilators have assignments.")
+
+
+# Generate colors that change progressively and ensure readability
+def generate_color_palette(num_colors):
+    colors = []
+    for i in range(num_colors):
+        hue = i / num_colors
+        lightness = 0.7
+        saturation = 0.8
+        rgb = colorsys.hls_to_rgb(hue, lightness, saturation)
+        hex_color = "{:02x}{:02x}{:02x}".format(int(rgb[0]*255), int(rgb[1]*255), int(rgb[2]*255))
+        colors.append(hex_color)
+    return colors
+# Ensure exam_ids are consistently tracked and associated with colors
+exam_ids = {exam.id for time_slot in exam_sessions for exam in exam_sessions[time_slot]}
+
+# Generate and assign colors
+
+exam_colors = {}
+color_palette = generate_color_palette(len(exam_ids) + 5)  # Ensure the palette is large enough
+
+for i, exam_id in enumerate(sorted(exam_ids)):
+    # Use modular arithmetic to skip 5 colors for each exam
+    color_index = (i * 6) % len(color_palette)
+    exam_colors[exam_id] = color_palette[color_index]
+# Prepare data for Excel output
+columns = ["Invigilator"] + [f"Slot {slot}" for slot in range(1, max_time_slot + 1)]
+wb = Workbook()
+ws = wb.active
+ws.title = "Invigilator Assignments"
+
+# Write the header
+ws.append(columns)
+
+# Write results to the sheet
+for invigilator in sorted(invigilators, key=lambda inv: inv.name):
+    row = [invigilator.name]
+    for slot in range(1, max_time_slot + 1):
+        exams_for_slot = results[invigilator.name][slot]
+        if exams_for_slot:
+            exam_list = ",".join(exams_for_slot)
+            row.append(exam_list)
+        else:
+            row.append("-")
+    ws.append(row)
+
+for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=2, max_col=ws.max_column):
+    for cell in row:
+        if cell.value and cell.value != "-":
+            # Extract exam IDs, handling cases where non-numeric values might be present
+            exam_ids_in_cell = []
+            for exam_id in cell.value.split(","):
+                try:
+                    # Extract numeric part from possible mixed strings
+                    numeric_id = ''.join(filter(str.isdigit, exam_id))
+                    if numeric_id:
+                        exam_ids_in_cell.append(int(numeric_id))
+                except ValueError:
+                    print(f"Skipping invalid exam ID: {exam_id}")
+            
+            invigilator_name = ws.cell(row=cell.row, column=1).value
+            invigilator = next((inv for inv in invigilators if inv.name == invigilator_name), None)
+            if invigilator and invigilator.lead == 1:
+                cell.font = Font(color="FFFFFF")
+            for exam_id in exam_ids_in_cell:
+                if exam_id in exam_colors:
+                    cell.fill = PatternFill(start_color=exam_colors[exam_id], end_color=exam_colors[exam_id], fill_type="solid")
+# Save the workbook
+wb.save('invigilator_assignments.xlsx')
+
+print("Results have been exported to invigilator_assignments.xlsx")
