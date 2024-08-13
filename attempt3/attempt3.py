@@ -193,21 +193,25 @@ def create_decision_variables(invigilators, exam_sessions):
 
 
 def define_constraints(prob, invigilators, exam_sessions, x, y, unmet_invig, unmet_lead, max_time_slot):
+    # Constraints for ensuring sufficient invigilators and lead examiner are assigned
     for time_slot, exams in exam_sessions.items():
         for exam in exams:
+            # Ensure the required number of invigilators are assigned or mark as unmet
             prob += (pulp.lpSum([x[invigilator.name, time_slot, exam.id]
                                  for invigilator in invigilators])
                      + unmet_invig[time_slot, exam.id]) >= exam.invig_required, f"Session_{exam.id}_Requirement"
-
+            # Ensure at least one lead examiner is assigned to each exam or mark as unmet
             prob += (pulp.lpSum([x[invigilator.name, time_slot, exam.id]
                                  for invigilator in invigilators
                                  if invigilator.lead == 1])
                      + unmet_lead[time_slot, exam.id]) >= 1, f"Session_{exam.id}_Lead_Requirement"
-
+# Constraint to ensure no invigilator is assigned to two consecutive timeslots in the same day
     for invigilator in invigilators:
-        for day_start in range(1, max_time_slot + 1, 3):
-            if day_start + 2 <= max_time_slot:
+        for day_start in range(1, max_time_slot + 1, 3): # Iterate over the start of each day
+            if day_start + 2 <= max_time_slot: # Ensure we do not go out of bounds
+                # Check if there are exams in the timeslots before applying the constraints
                 if day_start in exam_sessions and day_start + 1 in exam_sessions:
+                    # No consecutive timeslot assignments for the first two timeslots in a day
                     prob += pulp.lpSum([x[invigilator.name, day_start, exam.id]
                                         for exam in exam_sessions[day_start]]) + \
                             pulp.lpSum([x[invigilator.name, day_start + 1, exam.id]
@@ -215,12 +219,13 @@ def define_constraints(prob, invigilators, exam_sessions, x, y, unmet_invig, unm
                         f"No_Consecutive_Assignments_{invigilator.name}_Day_{(day_start // 3) + 1}_first_pair"
 
                 if day_start + 1 in exam_sessions and day_start + 2 in exam_sessions:
+                    # No consecutive timeslot assignments for the second and third timeslots in a day
                     prob += pulp.lpSum([x[invigilator.name, day_start + 1, exam.id]
                                         for exam in exam_sessions[day_start + 1]]) + \
                             pulp.lpSum([x[invigilator.name, day_start + 2, exam.id]
                                         for exam in exam_sessions[day_start + 2]]) <= 1, \
                         f"No_Consecutive_Assignments_{invigilator.name}_Day_{(day_start // 3) + 1}_second_pair"
-
+    # Constraint to ensure an invigilator is assigned to only one exam per time slot
     for invigilator in invigilators:
         for slot in range(1, max_time_slot + 1):
             prob += pulp.lpSum([x[invigilator.name, slot, exam.id]
@@ -228,16 +233,15 @@ def define_constraints(prob, invigilators, exam_sessions, x, y, unmet_invig, unm
 
     return prob
 
-
+# Objective function: Minimize penalties and the number of unavailable assignments
 def define_objective(prob, invigilators, exam_sessions, x, y, unmet_invig, unmet_lead, penalty):
-    large_penalty = 1000
-    unavailable_penalty = 100
+    large_penalty = 1000 # Large penalty for unmet invigilation requirements
+    unavailable_penalty = 100 # Penalty for assigning to unavailable time slots
 
     prob += (
         pulp.lpSum(
             [
-                (x[invigilator.name, time_slot, exam.id] * penalty[(invigilator.name, time_slot, exam.id)]
-                 + random.uniform(0, 1e-5))
+                (x[invigilator.name, time_slot, exam.id] * penalty[(invigilator.name, time_slot, exam.id)])
                 for invigilator in invigilators
                 for time_slot in exam_sessions
                 for exam in exam_sessions[time_slot]
@@ -273,6 +277,7 @@ def solve_problem(prob):
 def initialize_results(invigilators, max_time_slot):
     return {invigilator.name: {slot: [] for slot in range(1, max_time_slot + 1)} for invigilator in invigilators}
 
+# Fill the results dictionary with exam names
 
 def fill_results(results, invigilators, exam_sessions, x, used_invigilators):
     unavailable_assignments = []
@@ -287,6 +292,7 @@ def fill_results(results, invigilators, exam_sessions, x, used_invigilators):
                         unavailable_assignments.append((invigilator.name, slot))
     return results, used_invigilators, unavailable_assignments
 
+# Identify exams with unmet requirements
 
 def identify_unmet_requirements(exam_sessions, unmet_invig, unmet_lead):
     unmet_invig_requirements = []
@@ -323,7 +329,7 @@ def export_results_to_excel(invigilators, exam_sessions, results, exam_colours):
     wb.save('invigilator_assignments.xlsx')
     print("Results have been exported to invigilator_assignments.xlsx")
 
-
+# Colours the font and cells of each assignment, white font for leads, black for no leads, each exam has it own colour for readability
 def format_cells(ws, invigilators, exam_colours):
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=2, max_col=ws.max_column):
         for cell in row:
