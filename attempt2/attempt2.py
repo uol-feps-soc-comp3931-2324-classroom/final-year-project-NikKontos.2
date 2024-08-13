@@ -79,7 +79,6 @@ def read_invig_as_dict(filename):
 def read_exams_as_dict(filename):
     sessions = defaultdict(list)
     df = pd.read_excel(filename)
-    
     for _, row in df.iterrows():
         exam_id, exam_name, date = row['exam_id'], row['exam_name'], row['date']
         session_size, time_slot = row['session_size'], row['time_slot']
@@ -219,6 +218,26 @@ for time_slot, exams in exam_sessions.items():
                             for invigilator in invigilators 
                             if invigilator.lead == 1]) 
                 + unmet_lead[time_slot, exam.id]) >= 1, f"Session_{exam.id}_Lead_Requirement"
+# Constraint to ensure no invigilator is assigned to two consecutive timeslots in the same day
+for invigilator in invigilators:
+    for day_start in range(1, max_time_slot + 1, 3):  # Iterate over the start of each day
+        if day_start + 2 <= max_time_slot:  # Ensure we do not go out of bounds
+            # Check if there are exams in the timeslots before applying the constraints
+            if day_start in exam_sessions and day_start + 1 in exam_sessions:
+                # No consecutive timeslot assignments for the first two timeslots in a day
+                prob += pulp.lpSum([x[invigilator.name, day_start, exam.id] 
+                                    for exam in exam_sessions[day_start]]) + \
+                        pulp.lpSum([x[invigilator.name, day_start + 1, exam.id] 
+                                    for exam in exam_sessions[day_start + 1]]) <= 1, \
+                        f"No_Consecutive_Assignments_{invigilator.name}_Day_{(day_start // 3) + 1}_first_pair"
+
+            if day_start + 1 in exam_sessions and day_start + 2 in exam_sessions:
+                # No consecutive timeslot assignments for the second and third timeslots in a day
+                prob += pulp.lpSum([x[invigilator.name, day_start + 1, exam.id] 
+                                    for exam in exam_sessions[day_start + 1]]) + \
+                        pulp.lpSum([x[invigilator.name, day_start + 2, exam.id] 
+                                    for exam in exam_sessions[day_start + 2]]) <= 1, \
+                        f"No_Consecutive_Assignments_{invigilator.name}_Day_{(day_start // 3) + 1}_second_pair"
 
 # Constraint to ensure an invigilator is assigned to only one exam per time slot
 for invigilator in invigilators:
@@ -321,25 +340,26 @@ else:
 def generate_colour_palette(num_colours):
     colours = []
     for i in range(num_colours):
-        hue = i / num_colours
-        lightness = 0.7
-        saturation = 0.8
+        hue = (i / num_colours)
+        lightness=0.6 # Reduce lightness to avoid too light colours 
+        saturation = 0.8  # Increase saturation for more vivid colours 
         rgb = colorsys.hls_to_rgb(hue, lightness, saturation)
         hex_colour = "{:02x}{:02x}{:02x}".format(int(rgb[0]*255), int(rgb[1]*255), int(rgb[2]*255))
         colours.append(hex_colour)
+    print("HEX__",hex_colour)
     return colours
 # Ensure exam_ids are consistently tracked and associated with colours
-exam_ids = {exam.id for time_slot in exam_sessions for exam in exam_sessions[time_slot]}
+exam_ids = [exam.id for time_slot in exam_sessions for exam in exam_sessions[time_slot]]
 
 # Generate and assign colours
 
 exam_colours = {}
-colour_palette = generate_colour_palette(len(exam_ids) + 5)  # Ensure the palette is large enough
+colour_palette = generate_colour_palette(len(exam_ids) + 10)  # Ensure the palette is large enough
 
-for i, exam_id in enumerate(sorted(exam_ids)):
+for  i in range(len(exam_ids)+1):
     # Use modular arithmetic to skip 5 colours for each exam
     colour_index = (i * 6) % len(colour_palette)
-    exam_colours[exam_id] = colour_palette[colour_index]
+    exam_colours[i] = colour_palette[colour_index]
 # Prepare data for Excel output
 columns = ["Invigilator"] + [f"Slot {slot}" for slot in range(1, max_time_slot + 1)]
 wb = Workbook()
@@ -382,6 +402,8 @@ for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=2, max_col=ws.max
             for exam_id in exam_ids_in_cell:
                 if exam_id in exam_colours:
                     cell.fill = PatternFill(start_color=exam_colours[exam_id], end_color=exam_colours[exam_id], fill_type="solid")
+print(exam_colours)
+            
 # Save the workbook
 wb.save('invigilator_assignments.xlsx')
 
