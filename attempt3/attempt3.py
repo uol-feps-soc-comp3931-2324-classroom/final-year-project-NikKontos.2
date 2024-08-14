@@ -1,4 +1,6 @@
 import pandas as pd
+import os
+import sys
 import pulp
 from collections import defaultdict
 import random
@@ -59,6 +61,18 @@ class Exam:
 
 
 # Utility Functions
+
+def get_resource_path(relative_path):
+# Get the absolute path to the resource, for PyInstaller 
+    try:
+        # PyInstaller stores data files in a temporary folder under _MEIPASS
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
+
 def read_invig_as_dict(filename):
     invigilators = []
     df = pd.read_excel(filename)
@@ -371,8 +385,9 @@ def print_unassigned_invigilators(invigilators, results, max_time_slot):
 
 
 def main():
-    invig_file = 'large_invigilators.xlsx'
-    exams_file = 'large_exam_venues.xlsx'
+    # Paths to your Excel files
+    invig_file = get_resource_path('large_invigilators.xlsx')
+    exams_file = get_resource_path('large_exam_venues.xlsx')
 
     exam_sessions, invigilators = import_files(invig_file, exams_file)
 
