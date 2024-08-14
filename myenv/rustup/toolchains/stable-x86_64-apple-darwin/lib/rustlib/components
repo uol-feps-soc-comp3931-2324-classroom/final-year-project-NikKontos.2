@@ -1,0 +1,6 @@
+cargo-x86_64-apple-darwin
+clippy-preview-x86_64-apple-darwin
+rust-docs-x86_64-apple-darwin
+rust-std-x86_64-apple-darwin
+rustc-x86_64-apple-darwin
+rustfmt-preview-x86_64-apple-darwin

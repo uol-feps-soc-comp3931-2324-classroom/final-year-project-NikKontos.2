@@ -64,13 +64,8 @@ class Exam:
 
 def get_resource_path(relative_path):
 # Get the absolute path to the resource, for PyInstaller 
-    try:
-        # PyInstaller stores data files in a temporary folder under _MEIPASS
-        base_path = sys._MEIPASS
-    except AttributeError:
-        base_path = os.path.abspath(".")
-
-    return os.path.join(base_path, relative_path)
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_dir, relative_path)
 
 
 def read_invig_as_dict(filename):
