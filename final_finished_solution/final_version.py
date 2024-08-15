@@ -53,7 +53,11 @@ class Invigilator:
         self.name = name
         self.avail = [int(x) for x in avail.split(',')]
         self.lead = int(lead)
-        self.size_pref = [str(x) for x in size_pref.split(',')]
+        # Handle the size_pref if it's empty or not a string
+        if pd.isna(size_pref) or not isinstance(size_pref, str):
+            self.size_pref = []  # This means no preference, so penalty is 0 for all sizes
+        else:
+            self.size_pref = [str(x) for x in size_pref.split(',')]
 
     def __repr__(self):
         return f"{self.id},{self.name}, {self.avail}, {self.lead},{self.size_pref}"
@@ -165,11 +169,12 @@ def create_penalty_matrix(invigilators, exam_sessions):
     for invigilator in invigilators:
         for time_slot in exam_sessions:
             for exam in exam_sessions[time_slot]:
-                base_penalty = min(
-                    [penalty_matrix[exam.size_code].get(pref, 20) for pref in invigilator.size_pref]
+                if not invigilator.size_pref:  # If size_pref is empty, set penalty to 0
+                    penalty[(invigilator.name, time_slot, exam.id)] = 0
+                else:
+                    penalty[(invigilator.name, time_slot, exam.id)] = min(
+                        [penalty_matrix[exam.size_code].get(pref, 20) for pref in invigilator.size_pref]
                 )
-                penalty[(invigilator.name, time_slot, exam.id)] = base_penalty + random.uniform(0, 0.01)
-    
     return penalty
 
 def create_decision_variables(invigilators, exam_sessions):
@@ -295,7 +300,7 @@ def identify_unmet_requirements(exam_sessions, unmet_invig, unmet_lead):
     return unmet_invig_requirements, unmet_lead_requirements
 
 # Excel Export and Formatting
-def export_results_to_excel(invigilators, exam_sessions, results, exam_colours, unmet_invig_requirements, unmet_lead_requirements, unavailable_assignments, unassigned_invigilators):
+def export_results_to_excel(invigilators, exam_sessions, results, exam_colours, unmet_invig_requirements, unmet_lead_requirements, unavailable_assignments, unassigned_invigilators, objective_value):
     max_time_slot = max(exam_sessions.keys() )
 
     wb = Workbook()
@@ -312,6 +317,11 @@ def export_results_to_excel(invigilators, exam_sessions, results, exam_colours, 
             exams_for_slot = results[invigilator.name][slot]
             row.append(",".join(exams_for_slot) if exams_for_slot else "-")
         ws.append(row)
+    # Add the total penalty in the row below the last invigilator
+    total_penalty_row = ws.max_row + 1
+    ws[f"A{total_penalty_row}"] = "Total Penalty:"
+    ws[f"B{total_penalty_row}"] = objective_value
+ # Assuming `prob.objective` holds the penalty value
 
     # Add unmet lead requirements
     start_col = len(columns) + 4
@@ -486,7 +496,7 @@ def main():
         colour_index = (i * 6) % len(exam_colours)
         exam_colours_mapping[i] = exam_colours[colour_index]
 
-    export_results_to_excel(invigilators, exam_sessions, results, exam_colours_mapping, unmet_invig_requirements, unmet_lead_requirements, unavailable_assignments, unassigned_invigilators)
+    export_results_to_excel(invigilators, exam_sessions, results, exam_colours_mapping, unmet_invig_requirements, unmet_lead_requirements, unavailable_assignments, unassigned_invigilators,objective_value)
 
     print_unmet_requirements(unmet_invig_requirements, unmet_lead_requirements)
     print_unassigned_invigilators(invigilators, results, max_time_slot)
