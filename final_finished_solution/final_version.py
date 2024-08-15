@@ -1,3 +1,4 @@
+
 import subprocess
 import sys
 import pkg_resources
@@ -142,7 +143,7 @@ def import_files(invig_file, exams_file):
 
 def generate_colour_palette(num_colours):
     colours = []
-    for i in range(num_colours):
+    for i in range (num_colours):
         hue = (i / num_colours)
         lightness = 0.6
         saturation = 0.8
@@ -211,7 +212,7 @@ def define_constraints(prob, invigilators, exam_sessions, x, y, unmet_invig, unm
 
     # Ensure no invigilator is assigned to two consecutive timeslots in the same day
     for invigilator in invigilators:
-        for day_start in range(1, max_time_slot + 1, 3):
+        for day_start in range (1, max_time_slot + 1, 3):
             if day_start + 2 <= max_time_slot:
                 if day_start in exam_sessions and day_start + 1 in exam_sessions:
                     prob += pulp.lpSum([x[invigilator.name, day_start, exam.id] for exam in exam_sessions[day_start]]) + \
@@ -223,9 +224,9 @@ def define_constraints(prob, invigilators, exam_sessions, x, y, unmet_invig, unm
                             pulp.lpSum([x[invigilator.name, day_start + 2, exam.id] for exam in exam_sessions[day_start + 2]]) <= 1, \
                             f"No_Consecutive_Assignments_{invigilator.name}_Day_{(day_start // 3) + 1}_second_pair"
 
-    # Ensure an invigilator is assigned to only one exam per time slot
+     # Ensure an invigilator is assigned to only one exam per time slot
     for invigilator in invigilators:
-        for slot in range(1, max_time_slot + 1):
+        for slot in range (1, max_time_slot + 1):
             prob += pulp.lpSum([x[invigilator.name, slot, exam.id] for exam in exam_sessions[slot]]) <= 1, \
                     f"Invigilator_{invigilator.name}_Slot_{slot}"
 
@@ -259,7 +260,7 @@ def define_objective(prob, invigilators, exam_sessions, x, y, unmet_invig, unmet
     )
     return prob
 
-# Solution Handling
+ # Solution Handling
 def solve_problem(prob):
     prob.solve()
     return pulp.LpStatus[prob.status], pulp.value(prob.objective)
@@ -268,7 +269,7 @@ def initialize_results(invigilators, max_time_slot):
     return {invigilator.name: {slot: [] for slot in range(1, max_time_slot + 1)} for invigilator in invigilators}
 
 def fill_results(results, invigilators, exam_sessions, x, used_invigilators):
-    unavailable_assignments = []
+    unavailable_assignments =  []
     for invigilator in invigilators:
         for slot in range(1, max(exam_sessions.keys()) + 1):
             for exam in exam_sessions[slot]:
@@ -294,7 +295,7 @@ def identify_unmet_requirements(exam_sessions, unmet_invig, unmet_lead):
 
 # Excel Export and Formatting
 def export_results_to_excel(invigilators, exam_sessions, results, exam_colours, unmet_invig_requirements, unmet_lead_requirements, unavailable_assignments, unassigned_invigilators):
-    max_time_slot = max(exam_sessions.keys())
+    max_time_slot = max(exam_sessions.keys() )
 
     wb = Workbook()
     ws = wb.active
@@ -323,7 +324,7 @@ def export_results_to_excel(invigilators, exam_sessions, results, exam_colours, 
 
     # Add invigilators assigned to unavailable timeslots
     start_col = len(columns) + 5
-    start_col_letter = get_column_letter(start_col)
+    start_col_letter =  get_column_letter(start_col)
     ws[f"{start_col_letter}1"] = "Invigilators Assigned to Unavailable Timeslots"
     
     row_offset = 2
@@ -364,7 +365,7 @@ def auto_size_columns(ws, padding=2):
 
     for col in ws.columns:
         max_length = 0
-        col_letter = col[0].column_letter  # Get the column letter
+        col_letter  = col[0].column_letter  # Get the column letter
         for cell in col:
             try:
                 if cell.value:
