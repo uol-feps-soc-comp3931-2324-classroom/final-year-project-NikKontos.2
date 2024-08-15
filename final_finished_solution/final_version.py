@@ -4,15 +4,7 @@ import sys
 import pkg_resources
 import datetime
 import math
-import pandas as pd
-import os
-import pulp
-import random
-from collections import defaultdict
-from openpyxl import Workbook
-from openpyxl.styles import PatternFill, Font
-from openpyxl.utils import get_column_letter
-import colorsys
+
 
 # Installation and Version Checking
 def install(package):
@@ -44,6 +36,15 @@ def check_and_install():
             install(f"{package}=={required_version}")
 
 check_and_install()
+import pandas as pd
+import os
+import pulp
+import random
+from collections import defaultdict
+from openpyxl import Workbook
+from openpyxl.styles import PatternFill, Font
+from openpyxl.utils import get_column_letter
+import colorsys
 
 # Class Definitions
 class Invigilator:
@@ -358,11 +359,7 @@ def export_results_to_excel(invigilators, exam_sessions, results, exam_colours, 
 def auto_size_columns(ws, padding=2):
     
    #Auto-sizes the columns in the worksheet based on the length of the content,
-    #adding a fixed padding to ensure readability.
-
-    
-    #padding: The number of extra spaces to add to the column width.
-
+    # adding a fixed padding to ensure readability.
     for col in ws.columns:
         max_length = 0
         col_letter  = col[0].column_letter  # Get the column letter
