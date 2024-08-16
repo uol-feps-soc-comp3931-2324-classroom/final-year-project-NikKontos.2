@@ -55,7 +55,12 @@ class Invigilator:
         if pd.isna(avail) or not isinstance(avail, str):
             self.avail = []  # No availability restrictions, so no penalty for any slot
         else:
-            self.avail = [int(x) for x in avail.split(',')]        
+            try:
+                # Split on commas, and clean any spaces before converting to int
+                self.avail = [int(x.strip()) for x in avail.replace(' ', '').split(',')]
+            except ValueError:
+                print(f"Error parsing availability for invigilator {self.name}: {avail}")
+                self.avail = []  # Fallback to empty list on error        
         if pd.isna(lead):
             self.lead = 0  # if lead status not given, assume theyre not a lead
         else:
@@ -91,19 +96,19 @@ class Exam:
         elif session_size <= 160:
             return 5, 'm'
         elif session_size <= 200:
-            return 6, 'm'
+            return 5, 'm'
         elif session_size <= 240:
-            return 7, 'm'
+            return 5, 'm'
         elif session_size <= 300:
-            return 8, 'm'
+            return 6, 'm'
         elif session_size <= 340:
-            return 9, 'l'
+            return 7, 'l'
         elif session_size <= 380:
-            return 10, 'l'
+            return 8, 'l'
         elif session_size <= 420:
-            return 11, 'l'
+            return 9, 'l'
         else:
-            return 12, 'l'
+            return 10, 'l'
 
     def __repr__(self):
         return f"\n{self.id}, {self.name}, {self.date},{self.session_size},{self.invig_required},{self.size_code}"
@@ -212,21 +217,30 @@ def create_decision_variables(invigilators, exam_sessions):
                                         for time_slot in exam_sessions
                                         for exam in exam_sessions[time_slot]],
                                        cat='Binary')
+    
+
 
     return x, y, unmet_invig, unmet_lead
+
 # Constraint and Objective Definitions
 def define_constraints(prob, invigilators, exam_sessions, x, y, unmet_invig, unmet_lead, max_time_slot):
     # Ensure sufficient invigilators and lead examiners
     for time_slot, exams in exam_sessions.items():
         for exam in exams:
             prob += (pulp.lpSum([x[invigilator.name, time_slot, exam.id] for invigilator in invigilators])
-                     + unmet_invig[time_slot, exam.id]) >= exam.invig_required, f"Session_{exam.id}_Requirement"
+                     + unmet_invig[time_slot, exam.id]) == exam.invig_required, f"Session_{exam.id}_Requirement"
             prob += (pulp.lpSum([x[invigilator.name, time_slot, exam.id] for invigilator in invigilators if invigilator.lead == 1])
-                     + unmet_lead[time_slot, exam.id]) >= 1, f"Session_{exam.id}_Lead_Requirement"
+                     + unmet_lead[time_slot, exam.id]) == 1, f"Session_{exam.id}_Lead_Requirement"
 
-    # Ensure no invigilator is assigned to two consecutive timeslots in the same day
+    # Ensure no invigilator is assigned to more than one exam per time slot
     for invigilator in invigilators:
-        for day_start in range (1, max_time_slot + 1, 3):
+        for slot in range(1, max_time_slot + 1):
+            prob += pulp.lpSum([x[invigilator.name, slot, exam.id] for exam in exam_sessions[slot]]) <= 1, \
+                    f"Invigilator_{invigilator.name}_Slot_{slot}"
+
+    # Ensure no invigilator is assigned to consecutive time slots in the same day
+    for invigilator in invigilators:
+        for day_start in range(1, max_time_slot + 1, 3):  # Assuming 3 slots per day
             if day_start + 2 <= max_time_slot:
                 if day_start in exam_sessions and day_start + 1 in exam_sessions:
                     prob += pulp.lpSum([x[invigilator.name, day_start, exam.id] for exam in exam_sessions[day_start]]) + \
@@ -238,43 +252,41 @@ def define_constraints(prob, invigilators, exam_sessions, x, y, unmet_invig, unm
                             pulp.lpSum([x[invigilator.name, day_start + 2, exam.id] for exam in exam_sessions[day_start + 2]]) <= 1, \
                             f"No_Consecutive_Assignments_{invigilator.name}_Day_{(day_start // 3) + 1}_second_pair"
 
-     # Ensure an invigilator is assigned to only one exam per time slot
-    for invigilator in invigilators:
-        for slot in range (1, max_time_slot + 1):
-            prob += pulp.lpSum([x[invigilator.name, slot, exam.id] for exam in exam_sessions[slot]]) <= 1, \
-                    f"Invigilator_{invigilator.name}_Slot_{slot}"
-
     return prob
+
 
 def define_objective(prob, invigilators, exam_sessions, x, y, unmet_invig, unmet_lead, penalty):
-    large_penalty = 1000  # Large penalty for unmet invigilation requirements
-    unavailable_penalty = 100  # Penalty for assigning to unavailable time slots
+    # Weights for different types of penalties
+    large_penalty_invig = 10000  # Highest priority: unmet invigilation requirements
+    large_penalty_lead = 5000    # Second priority: unmet lead requirements
+    unavailable_penalty = 100    # Penalty for assigning to unavailable time slots
+    preference_penalty_weight = 10 # Penalty for not matching size preferences
 
+    # Objective function definition
     prob += (
-        pulp.lpSum(
-            [
-                (x[invigilator.name, time_slot, exam.id] * penalty[(invigilator.name, time_slot, exam.id)])
-                for invigilator in invigilators
-                for time_slot in exam_sessions
-                for exam in exam_sessions[time_slot]
-            ]
+        large_penalty_invig * pulp.lpSum(
+            unmet_invig[time_slot, exam.id] for time_slot in exam_sessions for exam in exam_sessions[time_slot]
         )
-        + large_penalty * (
-            pulp.lpSum(
-                unmet_invig[time_slot, exam.id] for time_slot in exam_sessions for exam in exam_sessions[time_slot]
-            )
-            + pulp.lpSum(
-                unmet_lead[time_slot, exam.id] for time_slot in exam_sessions for exam in exam_sessions[time_slot]
-            )
+        + large_penalty_lead * pulp.lpSum(
+            unmet_lead[time_slot, exam.id] for time_slot in exam_sessions for exam in exam_sessions[time_slot]
         )
         + unavailable_penalty * pulp.lpSum(
-            y[invigilator.name, time_slot] for invigilator in invigilators for time_slot in exam_sessions if (invigilator.name, time_slot) in y
+            x[invigilator.name, time_slot, exam.id] * (time_slot not in invigilator.avail)
+            for invigilator in invigilators
+            for time_slot in exam_sessions
+            for exam in exam_sessions[time_slot]
+        )
+        + preference_penalty_weight * pulp.lpSum(
+            x[invigilator.name, time_slot, exam.id] * penalty[(invigilator.name, time_slot, exam.id)]
+            for invigilator in invigilators
+            for time_slot in exam_sessions
+            for exam in exam_sessions[time_slot]
         ),
-        "Total Penalty, Unmet Requirements, and Unavailable Assignments"
+        "Total Penalty, Prioritized Unmet Requirements, Unavailable Time Slots, and Preferences"
     )
+    
     return prob
 
- # Solution Handling
 def solve_problem(prob):
     prob.solve()
     return pulp.LpStatus[prob.status], pulp.value(prob.objective)
@@ -336,8 +348,18 @@ def export_results_to_excel(invigilators, exam_sessions, results, exam_colours, 
     ws[f"B{total_penalty_row}"] = objective_value
  # Assuming `prob.objective` holds the penalty value
 
-    # Add unmet lead requirements
+    # Add unmet invigilator requirements
     start_col = len(columns) + 4
+    start_col_letter = get_column_letter(start_col)
+    ws[f"{start_col_letter}1"] = "Unmet Invigilator Requirements"
+    
+    row_offset = 2
+    for exam_name, time_slot in unmet_invig_requirements:
+        ws[f"{start_col_letter}{row_offset}"] = f"Exam: {exam_name}, Time Slot: {time_slot}"
+        row_offset += 1
+
+    # Add unmet lead requirements
+    start_col = len(columns) + 5
     start_col_letter = get_column_letter(start_col)
     ws[f"{start_col_letter}1"] = "Unmet Lead Requirements"
     
@@ -347,7 +369,7 @@ def export_results_to_excel(invigilators, exam_sessions, results, exam_colours, 
         row_offset += 1
 
     # Add invigilators assigned to unavailable timeslots
-    start_col = len(columns) + 5
+    start_col = len(columns) + 6
     start_col_letter =  get_column_letter(start_col)
     ws[f"{start_col_letter}1"] = "Invigilators Assigned to Unavailable Timeslots"
     
@@ -357,7 +379,7 @@ def export_results_to_excel(invigilators, exam_sessions, results, exam_colours, 
         row_offset += 1
 
     # Add unassigned invigilators
-    start_col = len(columns) + 6
+    start_col = len(columns) + 7
     start_col_letter = get_column_letter(start_col)
     ws[f"{start_col_letter}1"] = "Unassigned Invigilators"
     
@@ -404,8 +426,11 @@ def format_cells(ws, invigilators, exam_colours, exam_sessions):
                 exam_ids_in_cell = extract_exam_ids_from_cell(cell.value)
                 invigilator_name = ws.cell(row=cell.row, column=1).value
                 invigilator = next((inv for inv in invigilators if inv.name == invigilator_name), None)
-                if invigilator and invigilator.lead == 1:
-                    cell.font = Font(color="FFFFFF")
+                if invigilator:
+                    if invigilator.lead == 1:
+                        cell.font = Font(color="FFFFFF")
+                    else:
+                        cell.font = Font(color="000000")
                 apply_cell_format(cell, exam_ids_in_cell, exam_colours)
 
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=ws.max_column - 5, max_col=ws.max_column - 5):
@@ -474,8 +499,8 @@ def print_unassigned_invigilators(invigilators, results, max_time_slot):
 
 # Main Execution
 def main():
-    invig_file = get_resource_path('small_restricted_invigilators.xlsx')
-    exams_file = get_resource_path('large_exam_venues.xlsx')
+    invig_file = get_resource_path('(p(sml=0.0))30_invigilators.xlsx')
+    exams_file = get_resource_path('75_exam_venues.xlsx')
 
     exam_sessions, invigilators = import_files(invig_file, exams_file)
 
@@ -515,9 +540,9 @@ def main():
 
     export_results_to_excel(invigilators, exam_sessions, results, exam_colours_mapping, unmet_invig_requirements, unmet_lead_requirements, unavailable_assignments, unassigned_invigilators, objective_value, status)
 
-    print_unmet_requirements(unmet_invig_requirements, unmet_lead_requirements)
-    print_unassigned_invigilators(invigilators, results, max_time_slot)
-    print_unavailable_assignments(unavailable_assignments)
+    #print_unmet_requirements(unmet_invig_requirements, unmet_lead_requirements)
+    #print_unassigned_invigilators(invigilators, results, max_time_slot)
+    #print_unavailable_assignments(unavailable_assignments)
 
 if __name__ == "__main__":
     main()
